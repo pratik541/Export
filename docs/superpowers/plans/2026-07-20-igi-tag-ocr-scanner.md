@@ -11,8 +11,8 @@
 ## Global Constraints
 
 - Reference spec: `docs/superpowers/specs/2026-07-20-igi-tag-ocr-scanner-design.md` — read it if any task here seems ambiguous.
-- **Use Python 3.11 for this project, not the machine's default Python 3.14.** This machine's default `python`/`py` resolves to 3.14.3, which is too new to trust for prebuilt `opencv-python-headless`/`pyzbar` wheels. A Python 3.11.15 interpreter is already installed at `C:\Users\HP\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\python.exe` (POSIX path in Git Bash: `/c/Users/HP/AppData/Roaming/uv/python/cpython-3.11.15-windows-x86_64-none/python.exe`). All tasks create/use a `.venv` built from that interpreter.
-- All shell commands in this plan are written for Git Bash (the `Bash` tool), using `source .venv/Scripts/activate` to activate on Windows.
+- **Use Python 3.11 for this project, not the machine's default Python 3.14.** This machine's default `python`/`py` resolves to 3.14.3, which is too new to trust for prebuilt `opencv-python-headless`/`pyzbar` wheels. Use a **conda environment named `igi-ocr`** (conda 25.5.1 is already installed on this machine) built with `python=3.11`.
+- All shell commands in this plan are written for Git Bash (the `Bash` tool), using `source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr` to activate the environment before any `pip`/`pytest`/`streamlit` command.
 - No hardcoded Windows tesseract path anywhere in application code — `ocr.py` only reads it from the `TESSERACT_CMD` environment variable, and only if set.
 - `requirements.txt` must contain exactly: `streamlit`, `pytesseract`, `opencv-python-headless`, `pyzbar`, `pandas`, `openpyxl`, `Pillow` (no extras — Streamlit Community Cloud installs from this file verbatim).
 - Tesseract itself is **not installed on this dev machine**. Tests must not require the real `tesseract` binary or real barcode images — mock `pytesseract`/`pyzbar` calls at their module boundary in unit tests. A manual end-to-end check with the real binary is a separate, final task.
@@ -20,7 +20,7 @@
 
 ---
 
-### Task 1: Project scaffolding (venv, dependency manifests, test config)
+### Task 1: Project scaffolding (conda env, dependency manifests, test config)
 
 **Files:**
 - Create: `requirements.txt`
@@ -30,21 +30,21 @@
 - Create: `.gitignore`
 
 **Interfaces:**
-- Produces: a `.venv` (Python 3.11.15) that every later task's `pip install` and `pytest` commands run inside.
+- Produces: a conda environment named `igi-ocr` (Python 3.11) that every later task's `pip install`, `pytest`, and `streamlit run` commands run inside.
 
-- [ ] **Step 1: Create the virtual environment**
+- [ ] **Step 1: Create the conda environment**
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && "/c/Users/HP/AppData/Roaming/uv/python/cpython-3.11.15-windows-x86_64-none/python.exe" -m venv .venv
+source "$(conda info --base)/etc/profile.d/conda.sh" && conda create -n igi-ocr python=3.11 -y
 ```
-Expected: a `.venv/` directory is created with no error output.
+Expected: ends with `# To activate this environment, use\n#\n#     $ conda activate igi-ocr`.
 
 - [ ] **Step 2: Verify activation and interpreter version**
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && python --version
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && python --version
 ```
 Expected: `Python 3.11.15`
 
@@ -74,11 +74,11 @@ tesseract-ocr
 libzbar0
 ```
 
-- [ ] **Step 6: Install dependencies into the venv**
+- [ ] **Step 6: Install dependencies into the conda environment**
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pip install -r requirements-dev.txt
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pip install -r requirements-dev.txt
 ```
 Expected: exits 0; ends with something like `Successfully installed ... streamlit-... pytesseract-... opencv-python-headless-... pyzbar-... pandas-... openpyxl-... Pillow-... pytest-...`
 
@@ -92,7 +92,6 @@ testpaths = tests
 - [ ] **Step 8: Write `.gitignore`**
 
 ```
-.venv/
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -103,14 +102,14 @@ __pycache__/
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pytest
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pytest
 ```
 Expected: `no tests ran` (exit code may be 5 — that's fine, there are no test files yet).
 
 - [ ] **Step 10: Commit**
 
 ```bash
-cd "/d/IGI_OCR" && git add requirements.txt requirements-dev.txt packages.txt pytest.ini .gitignore && git commit -m "chore: project scaffolding (venv deps, pytest config)"
+cd "/d/IGI_OCR" && git add requirements.txt requirements-dev.txt packages.txt pytest.ini .gitignore && git commit -m "chore: project scaffolding (conda env deps, pytest config)"
 ```
 
 ---
@@ -221,7 +220,7 @@ def test_validate_fields_flags_needs_review_on_invalid_grade_code():
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pytest tests/test_parsing.py -v
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pytest tests/test_parsing.py -v
 ```
 Expected: `ModuleNotFoundError: No module named 'parsing'` (or collection error) — `parsing.py` doesn't exist yet.
 
@@ -372,7 +371,7 @@ def validate_fields(fields: dict, barcode_value: str | None) -> dict:
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pytest tests/test_parsing.py -v
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pytest tests/test_parsing.py -v
 ```
 Expected: all 7 tests PASS.
 
@@ -439,7 +438,7 @@ def test_preprocess_handles_blank_white_image_without_crashing():
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pytest tests/test_imaging.py -v
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pytest tests/test_imaging.py -v
 ```
 Expected: `ModuleNotFoundError: No module named 'imaging'`
 
@@ -488,7 +487,7 @@ def _deskew(binary_image: np.ndarray) -> np.ndarray:
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pytest tests/test_imaging.py -v
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pytest tests/test_imaging.py -v
 ```
 Expected: all 4 tests PASS.
 
@@ -551,7 +550,7 @@ def test_run_ocr_delegates_to_pytesseract(monkeypatch):
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pytest tests/test_ocr.py -v
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pytest tests/test_ocr.py -v
 ```
 Expected: `ModuleNotFoundError: No module named 'ocr'`
 
@@ -581,7 +580,7 @@ def run_ocr(image) -> str:
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pytest tests/test_ocr.py -v
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pytest tests/test_ocr.py -v
 ```
 Expected: all 3 tests PASS.
 
@@ -705,7 +704,7 @@ def test_assess_quality_accepts_good_image():
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pytest tests/test_quality.py -v
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pytest tests/test_quality.py -v
 ```
 Expected: `ModuleNotFoundError: No module named 'quality'`
 
@@ -767,7 +766,7 @@ def assess_quality(image: np.ndarray, ocr_func) -> tuple[bool, str | None]:
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pytest tests/test_quality.py -v
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pytest tests/test_quality.py -v
 ```
 Expected: all 11 tests PASS.
 
@@ -849,7 +848,7 @@ def test_decode_barcodes_skips_none_images():
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pytest tests/test_decoding.py -v
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pytest tests/test_decoding.py -v
 ```
 Expected: `ModuleNotFoundError: No module named 'decoding'`
 
@@ -893,7 +892,7 @@ def decode_barcodes(*images, decode_func=zbar_decode) -> dict:
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pytest tests/test_decoding.py -v
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pytest tests/test_decoding.py -v
 ```
 Expected: all 5 tests PASS.
 
@@ -955,7 +954,7 @@ def test_build_excel_bytes_handles_empty_dataframe():
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pytest tests/test_excel_export.py -v
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pytest tests/test_excel_export.py -v
 ```
 Expected: `ModuleNotFoundError: No module named 'excel_export'`
 
@@ -978,7 +977,7 @@ def build_excel_bytes(dataframe: pd.DataFrame) -> bytes:
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pytest tests/test_excel_export.py -v
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pytest tests/test_excel_export.py -v
 ```
 Expected: both tests PASS.
 
@@ -1076,7 +1075,7 @@ def test_process_image_builds_full_row_on_success(monkeypatch):
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pytest tests/test_pipeline.py -v
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pytest tests/test_pipeline.py -v
 ```
 Expected: `ModuleNotFoundError: No module named 'pipeline'`
 
@@ -1134,7 +1133,7 @@ def process_image(image_bytes: bytes, filename: str) -> dict:
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && pytest tests/test_pipeline.py -v
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && pytest tests/test_pipeline.py -v
 ```
 Expected: all 3 tests PASS.
 
@@ -1246,7 +1245,7 @@ This machine does not have tesseract installed. Before running the app locally e
 
 Run:
 ```bash
-cd "/d/IGI_OCR" && source .venv/Scripts/activate && streamlit run app.py
+cd "/d/IGI_OCR" && source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr && streamlit run app.py
 ```
 Expected: app opens in a browser tab. Manually verify:
 - Uploading a real IGI tag photo (or the sample tag) produces a row in the table.
@@ -1282,12 +1281,14 @@ an Excel file.
 
 ## Local setup
 
-1. Install Python 3.11 (this project targets 3.11 — very new Python versions may
-   lack prebuilt wheels for opencv-python-headless/pyzbar).
-2. Create and activate a virtual environment, then install dependencies:
+1. Install [Miniconda/Anaconda](https://docs.conda.io/en/latest/miniconda.html)
+   if you don't already have `conda` available (this project targets Python
+   3.11 — very new Python versions may lack prebuilt wheels for
+   opencv-python-headless/pyzbar).
+2. Create and activate the conda environment, then install dependencies:
    ```bash
-   python -m venv .venv
-   source .venv/Scripts/activate   # Windows Git Bash; use .venv/bin/activate on Mac/Linux
+   conda create -n igi-ocr python=3.11 -y
+   source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr   # Git Bash; on Windows cmd/PowerShell use `conda activate igi-ocr` directly
    pip install -r requirements-dev.txt
    ```
 3. Install the Tesseract OCR binary (required by `pytesseract`):
