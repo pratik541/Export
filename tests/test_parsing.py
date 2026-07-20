@@ -43,6 +43,26 @@ def test_parse_fields_accepts_marouise_as_misread_of_marquise():
     assert fields["shape"] == "MARQUISE"
 
 
+def test_parse_fields_accepts_cvd_with_one_extra_character():
+    # Real OCR output on a genuine tag photo: "CVD" read as "cVvD" (extra V).
+    fields = parsing.parse_fields("REPORT\ncVvD")
+    assert fields["report_type"] == "CVD"
+
+
+def test_parse_fields_accepts_cvd_with_one_substituted_character():
+    # Real OCR output on a genuine tag photo: "CVD" read as "cvb" (D -> b).
+    fields = parsing.parse_fields("REPORT\ncvb")
+    assert fields["report_type"] == "CVD"
+
+
+def test_parse_fields_does_not_fabricate_report_type_from_unrelated_text():
+    # Real OCR output on a genuine tag photo: "CVD" wasn't captured at all --
+    # what follows "REPORT" is unrelated OCR noise, not a near-miss of any
+    # known report type, and must not be forced into a match.
+    fields = parsing.parse_fields("REPORT\nIG\nRT - 80961420")
+    assert fields["report_type"] is None
+
+
 def test_validate_fields_prefers_barcode_value_over_ocr_value():
     fields = {
         "igi_report_no": "809614206", "report_type": "CVD",

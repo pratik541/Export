@@ -19,9 +19,41 @@ _COLOR_CLARITY_RE = re.compile(
     r"^([D-Z])\s+(FL|IF|VVS1|VVS2|VS1|VS2|SI1|SI2|SI3|I1|I2|I3)$"
 )
 _IGI_CERT_RE = re.compile(r"IGI\s*CERT\s*-?\s*(\d{8,10})", re.IGNORECASE)
-_REPORT_TYPE_RE = re.compile(r"REPORT\s+(CVD|NATURAL|TREATED)", re.IGNORECASE)
+_WORD_RE = re.compile(r"[A-Za-z]+")
 
 _FIELD_KEYS = ("igi_report_no", "report_type", "shape", "carat", "color", "clarity")
+
+
+def _within_one_edit(a: str, b: str) -> bool:
+    """True if `a` can be turned into `b` with at most one character
+    insertion, deletion, or substitution."""
+    if a == b:
+        return True
+    if abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        return sum(1 for x, y in zip(a, b) if x != y) <= 1
+    longer, shorter = (a, b) if len(a) > len(b) else (b, a)
+    return any(longer[:i] + longer[i + 1:] == shorter for i in range(len(longer)))
+
+
+def _find_report_type(raw_text: str) -> str | None:
+    # "CVD" is only 3 characters, so a single OCR misread (seen on real tag
+    # photos as both "CVVD" and "CVB") makes an exact match fail entirely.
+    # Rather than exact-match the word right after "REPORT", accept it if
+    # it's within one edit of a known report type -- scoped to just the word
+    # immediately following the "REPORT" label, so unrelated OCR noise
+    # elsewhere in the text can't be mistaken for one.
+    words = _WORD_RE.findall(raw_text)
+    for i, word in enumerate(words):
+        if word.upper() != "REPORT":
+            continue
+        for candidate in words[i + 1 : i + 3]:
+            upper_candidate = candidate.upper()
+            for canonical in REPORT_TYPE_WHITELIST:
+                if _within_one_edit(upper_candidate, canonical):
+                    return canonical
+    return None
 
 
 def parse_fields(raw_text: str) -> dict:
@@ -55,9 +87,7 @@ def parse_fields(raw_text: str) -> dict:
     if igi_match:
         fields["igi_report_no"] = igi_match.group(1)
 
-    report_match = _REPORT_TYPE_RE.search(raw_text.upper())
-    if report_match:
-        fields["report_type"] = report_match.group(1)
+    fields["report_type"] = _find_report_type(raw_text)
 
     return fields
 
