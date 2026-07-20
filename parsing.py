@@ -10,7 +10,7 @@ SHAPE_OCR_ALIASES = {"MAROUISE": "MARQUISE"}
 CLARITY_WHITELIST = {
     "FL", "IF", "VVS1", "VVS2", "VS1", "VS2", "SI1", "SI2", "SI3", "I1", "I2", "I3",
 }
-REPORT_TYPE_WHITELIST = {"CVD", "NATURAL", "TREATED"}
+REPORT_TYPE_WHITELIST = {"CVD", "HPHT", "NATURAL", "TREATED"}
 
 CRITICAL_FIELDS = ("igi_report_no", "shape", "carat", "color", "clarity", "report_type")
 

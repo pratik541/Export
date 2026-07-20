@@ -63,6 +63,12 @@ def test_parse_fields_does_not_fabricate_report_type_from_unrelated_text():
     assert fields["report_type"] is None
 
 
+def test_parse_fields_recognizes_hpht_report_type():
+    # IGI lab-grown diamond reports name the growth method as CVD or HPHT.
+    fields = parsing.parse_fields("REPORT\nHPHT")
+    assert fields["report_type"] == "HPHT"
+
+
 def test_validate_fields_prefers_barcode_value_over_ocr_value():
     fields = {
         "igi_report_no": "809614206", "report_type": "CVD",
