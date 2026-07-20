@@ -34,6 +34,35 @@ def test_parse_fields_accepts_svm_as_misread_of_sym_label():
     assert fields["symmetry"] == "EX"
 
 
+def test_parse_fields_accepts_sum_as_misread_of_sym_label():
+    # Seen on a real tag photo: "Sym" OCR'd as "Sum".
+    fields = parsing.parse_fields("Sum-VG")
+    assert fields["symmetry"] == "VG"
+
+
+def test_parse_fields_accepts_capital_i_as_misread_of_fl_label():
+    # Seen on real tag photos: "Fl" (fluorescence label) OCR'd as "FI"
+    # (capital I substituting for lowercase L).
+    fields = parsing.parse_fields("FI-N")
+    assert fields["fluorescence"] == "N"
+
+
+def test_parse_fields_accepts_space_separated_grade_label():
+    # Seen on a real tag photo: the "-" between a grade label and its value
+    # was OCR'd as a plain space instead.
+    fields = parsing.parse_fields("Pol FX")
+    assert fields["polish"] == "FX"
+
+
+def test_parse_fields_does_not_treat_fl_prefixed_garbage_as_fluorescence():
+    # Seen on a real tag photo: unrelated garbled OCR output ("fie") starts
+    # with "fi", which must NOT be treated as the "Fl" label with a fused,
+    # separator-less value -- that would fabricate a fluorescence reading
+    # that was never printed on the tag.
+    fields = parsing.parse_fields("fie")
+    assert fields["fluorescence"] is None
+
+
 def test_parse_fields_returns_none_for_missing_fields():
     fields = parsing.parse_fields("garbage unrelated text\nwith no matches")
     assert fields["igi_report_no"] is None
@@ -46,6 +75,13 @@ def test_parse_fields_matches_shape_with_trailing_ocr_noise_on_same_line():
     # character on the shape line ("EMERALD #") rather than a clean match.
     fields = parsing.parse_fields("EMERALD #")
     assert fields["shape"] == "EMERALD"
+
+
+def test_parse_fields_accepts_marouise_as_misread_of_marquise():
+    # Real OCR output on a genuine tag photo misread "MARQUISE" as "MAROUISE"
+    # (Q/O confusion), with trailing noise attached on the same line.
+    fields = parsing.parse_fields("MAROUISE! ate")
+    assert fields["shape"] == "MARQUISE"
 
 
 def test_validate_fields_prefers_barcode_value_over_ocr_value():

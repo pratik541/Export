@@ -1,7 +1,18 @@
 import cv2
 import numpy as np
 
-BLUR_VARIANCE_THRESHOLD = 100.0
+# Calibrated against 6 real IGI tag phone photos (see tests/fixtures/), not
+# synthetic full-frame noise: a real photo is mostly plain background around a
+# small tag, so its whole-frame Laplacian variance runs far lower than a
+# maximally-detailed synthetic test image even when the tag itself is sharp and
+# legible. The lowest variance among 6 verified-legible real photos was 11.3
+# (and it did NOT correspond to the most in-focus-looking one — variance did
+# not even reliably rank sharpness among them). A threshold near that range
+# would reject real, usable photos; this only screens out near-blank/degenerate
+# captures (a truly uniform image scores 0), and leaves distinguishing "good
+# enough to read" to the text-presence check below, which is a direct
+# measurement rather than a proxy.
+BLUR_VARIANCE_THRESHOLD = 5.0
 DARK_PIXEL_RATIO_THRESHOLD = 0.6
 BRIGHT_PIXEL_RATIO_THRESHOLD = 0.4
 MIN_OCR_CHARS = 10

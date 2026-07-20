@@ -4,6 +4,9 @@ SHAPE_WHITELIST = {
     "ROUND", "EMERALD", "OVAL", "PEAR", "CUSHION", "PRINCESS",
     "RADIANT", "HEART", "MARQUISE", "ASSCHER",
 }
+# Known systematic OCR misreads mapped back to their canonical shape name.
+# "MAROUISE" (Q misread as O) was seen on a real tag photo.
+SHAPE_OCR_ALIASES = {"MAROUISE": "MARQUISE"}
 CLARITY_WHITELIST = {
     "FL", "IF", "VVS1", "VVS2", "VS1", "VS2", "SI1", "SI2", "SI3", "I1", "I2", "I3",
 }
@@ -21,11 +24,21 @@ _IGI_CERT_RE = re.compile(r"IGI\s*CERT\s*-?\s*(\d{8,10})", re.IGNORECASE)
 _LOT_REF_RE = re.compile(r"^[A-Z]\d{5,7}$")
 _REPORT_TYPE_RE = re.compile(r"REPORT\s+(CVD|NATURAL|TREATED)", re.IGNORECASE)
 _GRADE_LABEL_RE = re.compile(
-    r"\b(Cut|Pol|Sym|Svm|Sim|Fl)\s*[-:]\s*([A-Za-z]{1,3})\b", re.IGNORECASE
+    # Requires at least one separator character (space, hyphen, or colon) —
+    # real tag photos OCR the "-"/":" between a grade label and its value as a
+    # plain space just as often as a hyphen/colon, so a bare "[-:]" is too
+    # strict. But the separator can't be made fully optional either: doing so
+    # let "Fl"/"FI" match as a mere prefix of unrelated garbled OCR tokens
+    # (e.g. "fie" parsed as label "FI" + value "e"), fabricating field values
+    # that were never printed on the tag.
+    r"\b(Cut|Pol|Sym|Svm|Sim|Sum|Fl|FI)[-:\s]+([A-Za-z]{1,3})\b", re.IGNORECASE
 )
 _GRADE_LABEL_MAP = {
     "CUT": "cut", "POL": "polish", "SYM": "symmetry", "SVM": "symmetry",
-    "SIM": "symmetry", "FL": "fluorescence",
+    "SIM": "symmetry", "SUM": "symmetry",
+    # "FI" (capital I) is a near-universal OCR misread of "Fl" (lowercase L)
+    # in this font, seen on every real tag photo tested.
+    "FL": "fluorescence", "FI": "fluorescence",
 }
 
 _FIELD_KEYS = (
@@ -55,7 +68,8 @@ def parse_fields(raw_text: str) -> dict:
             continue
 
         if fields["shape"] is None:
-            shape_tokens = [token for token in re.findall(r"[A-Z]+", upper) if token in SHAPE_WHITELIST]
+            candidates = (SHAPE_OCR_ALIASES.get(token, token) for token in re.findall(r"[A-Z]+", upper))
+            shape_tokens = [token for token in candidates if token in SHAPE_WHITELIST]
             if shape_tokens:
                 fields["shape"] = shape_tokens[0]
                 continue
