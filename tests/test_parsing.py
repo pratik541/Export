@@ -8,59 +8,17 @@ CVD
 3.01
 E VS1
 EMERALD
-Cut-VG Pol-EX
-Sym-EX Fl-N
 """
 
 
 def test_parse_fields_extracts_all_fields_from_sample_tag():
     fields = parsing.parse_fields(SAMPLE_RAW_TEXT)
-    assert fields["lot_ref_no"] == "C141619"
     assert fields["igi_report_no"] == "809614206"
     assert fields["report_type"] == "CVD"
     assert fields["shape"] == "EMERALD"
     assert fields["carat"] == "3.01"
     assert fields["color"] == "E"
     assert fields["clarity"] == "VS1"
-    assert fields["cut"] == "VG"
-    assert fields["polish"] == "EX"
-    assert fields["symmetry"] == "EX"
-    assert fields["fluorescence"] == "N"
-
-
-def test_parse_fields_accepts_svm_as_misread_of_sym_label():
-    # IGI tags often OCR "Sym" as "Svm" due to font/glare (seen on the real sample tag).
-    fields = parsing.parse_fields("Svm-EX")
-    assert fields["symmetry"] == "EX"
-
-
-def test_parse_fields_accepts_sum_as_misread_of_sym_label():
-    # Seen on a real tag photo: "Sym" OCR'd as "Sum".
-    fields = parsing.parse_fields("Sum-VG")
-    assert fields["symmetry"] == "VG"
-
-
-def test_parse_fields_accepts_capital_i_as_misread_of_fl_label():
-    # Seen on real tag photos: "Fl" (fluorescence label) OCR'd as "FI"
-    # (capital I substituting for lowercase L).
-    fields = parsing.parse_fields("FI-N")
-    assert fields["fluorescence"] == "N"
-
-
-def test_parse_fields_accepts_space_separated_grade_label():
-    # Seen on a real tag photo: the "-" between a grade label and its value
-    # was OCR'd as a plain space instead.
-    fields = parsing.parse_fields("Pol FX")
-    assert fields["polish"] == "FX"
-
-
-def test_parse_fields_does_not_treat_fl_prefixed_garbage_as_fluorescence():
-    # Seen on a real tag photo: unrelated garbled OCR output ("fie") starts
-    # with "fi", which must NOT be treated as the "Fl" label with a fused,
-    # separator-less value -- that would fabricate a fluorescence reading
-    # that was never printed on the tag.
-    fields = parsing.parse_fields("fie")
-    assert fields["fluorescence"] is None
 
 
 def test_parse_fields_returns_none_for_missing_fields():
@@ -68,6 +26,7 @@ def test_parse_fields_returns_none_for_missing_fields():
     assert fields["igi_report_no"] is None
     assert fields["carat"] is None
     assert fields["shape"] is None
+    assert fields["report_type"] is None
 
 
 def test_parse_fields_matches_shape_with_trailing_ocr_noise_on_same_line():
@@ -86,9 +45,8 @@ def test_parse_fields_accepts_marouise_as_misread_of_marquise():
 
 def test_validate_fields_prefers_barcode_value_over_ocr_value():
     fields = {
-        "lot_ref_no": "C141619", "igi_report_no": "809614206", "report_type": "CVD",
+        "igi_report_no": "809614206", "report_type": "CVD",
         "shape": "EMERALD", "carat": "3.01", "color": "E", "clarity": "VS1",
-        "cut": "VG", "polish": "EX", "symmetry": "EX", "fluorescence": "N",
     }
     result = parsing.validate_fields(fields, barcode_value="999999999")
     assert result["igi_report_no"] == "999999999"
@@ -97,31 +55,26 @@ def test_validate_fields_prefers_barcode_value_over_ocr_value():
 
 def test_validate_fields_falls_back_to_ocr_value_when_no_barcode():
     fields = {
-        "lot_ref_no": "C141619", "igi_report_no": "809614206", "report_type": "CVD",
+        "igi_report_no": "809614206", "report_type": "CVD",
         "shape": "EMERALD", "carat": "3.01", "color": "E", "clarity": "VS1",
-        "cut": "VG", "polish": "EX", "symmetry": "EX", "fluorescence": "N",
     }
     result = parsing.validate_fields(fields, barcode_value=None)
     assert result["igi_report_no"] == "809614206"
 
 
-def test_validate_fields_flags_needs_review_when_critical_field_missing():
+def test_validate_fields_flags_needs_review_when_field_missing():
     fields = {
-        "lot_ref_no": None, "igi_report_no": None, "report_type": None,
+        "igi_report_no": None, "report_type": None,
         "shape": None, "carat": None, "color": None, "clarity": None,
-        "cut": None, "polish": None, "symmetry": None, "fluorescence": None,
     }
     result = parsing.validate_fields(fields, barcode_value=None)
     assert result["needs_review"] is True
 
 
-def test_validate_fields_flags_needs_review_on_invalid_grade_code():
-    # "FX" is not a valid IGI grade code (real codes are EX/VG/G/F/P) — this is the
-    # exact OCR misread ("EX" -> "FX") observed on the real sample tag.
+def test_validate_fields_flags_needs_review_on_invalid_report_type():
     fields = {
-        "lot_ref_no": "C141619", "igi_report_no": "809614206", "report_type": "CVD",
+        "igi_report_no": "809614206", "report_type": "GARBLED",
         "shape": "EMERALD", "carat": "3.01", "color": "E", "clarity": "VS1",
-        "cut": "VG", "polish": "FX", "symmetry": "FX", "fluorescence": "N",
     }
     result = parsing.validate_fields(fields, barcode_value="809614206")
     assert result["needs_review"] is True

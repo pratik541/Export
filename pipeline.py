@@ -33,12 +33,9 @@ def process_image(image_bytes: bytes, filename: str) -> dict:
     fields = parsing.parse_fields(raw_text)
     validated = parsing.validate_fields(fields, decoded["barcode_value"])
 
-    qr_values = decoded["qr_values"]
     row = {
         "filename": filename,
         "accepted": True,
-        "cert_link_qr": qr_values[0] if len(qr_values) > 0 else None,
-        "video_link_qr": qr_values[1] if len(qr_values) > 1 else None,
         "raw_ocr_text": raw_text,
     }
     row.update(validated)

@@ -10,41 +10,18 @@ SHAPE_OCR_ALIASES = {"MAROUISE": "MARQUISE"}
 CLARITY_WHITELIST = {
     "FL", "IF", "VVS1", "VVS2", "VS1", "VS2", "SI1", "SI2", "SI3", "I1", "I2", "I3",
 }
-GRADE_WHITELIST = {"EX", "VG", "G", "F", "P"}
-FLUORESCENCE_WHITELIST = {"N", "F", "M", "S", "VS"}
 REPORT_TYPE_WHITELIST = {"CVD", "NATURAL", "TREATED"}
 
-CRITICAL_FIELDS = ("igi_report_no", "shape", "carat", "color", "clarity")
+CRITICAL_FIELDS = ("igi_report_no", "shape", "carat", "color", "clarity", "report_type")
 
 _CARAT_RE = re.compile(r"^\d+\.\d{2}$")
 _COLOR_CLARITY_RE = re.compile(
     r"^([D-Z])\s+(FL|IF|VVS1|VVS2|VS1|VS2|SI1|SI2|SI3|I1|I2|I3)$"
 )
 _IGI_CERT_RE = re.compile(r"IGI\s*CERT\s*-?\s*(\d{8,10})", re.IGNORECASE)
-_LOT_REF_RE = re.compile(r"^[A-Z]\d{5,7}$")
 _REPORT_TYPE_RE = re.compile(r"REPORT\s+(CVD|NATURAL|TREATED)", re.IGNORECASE)
-_GRADE_LABEL_RE = re.compile(
-    # Requires at least one separator character (space, hyphen, or colon) —
-    # real tag photos OCR the "-"/":" between a grade label and its value as a
-    # plain space just as often as a hyphen/colon, so a bare "[-:]" is too
-    # strict. But the separator can't be made fully optional either: doing so
-    # let "Fl"/"FI" match as a mere prefix of unrelated garbled OCR tokens
-    # (e.g. "fie" parsed as label "FI" + value "e"), fabricating field values
-    # that were never printed on the tag.
-    r"\b(Cut|Pol|Sym|Svm|Sim|Sum|Fl|FI)[-:\s]+([A-Za-z]{1,3})\b", re.IGNORECASE
-)
-_GRADE_LABEL_MAP = {
-    "CUT": "cut", "POL": "polish", "SYM": "symmetry", "SVM": "symmetry",
-    "SIM": "symmetry", "SUM": "symmetry",
-    # "FI" (capital I) is a near-universal OCR misread of "Fl" (lowercase L)
-    # in this font, seen on every real tag photo tested.
-    "FL": "fluorescence", "FI": "fluorescence",
-}
 
-_FIELD_KEYS = (
-    "lot_ref_no", "igi_report_no", "report_type", "shape", "carat",
-    "color", "clarity", "cut", "polish", "symmetry", "fluorescence",
-)
+_FIELD_KEYS = ("igi_report_no", "report_type", "shape", "carat", "color", "clarity")
 
 
 def parse_fields(raw_text: str) -> dict:
@@ -74,10 +51,6 @@ def parse_fields(raw_text: str) -> dict:
                 fields["shape"] = shape_tokens[0]
                 continue
 
-        if fields["lot_ref_no"] is None and _LOT_REF_RE.match(upper):
-            fields["lot_ref_no"] = upper
-            continue
-
     igi_match = _IGI_CERT_RE.search(raw_text)
     if igi_match:
         fields["igi_report_no"] = igi_match.group(1)
@@ -85,11 +58,6 @@ def parse_fields(raw_text: str) -> dict:
     report_match = _REPORT_TYPE_RE.search(raw_text.upper())
     if report_match:
         fields["report_type"] = report_match.group(1)
-
-    for label, value in _GRADE_LABEL_RE.findall(raw_text):
-        key = _GRADE_LABEL_MAP.get(label.upper())
-        if key and fields[key] is None:
-            fields[key] = value.upper()
 
     return fields
 
@@ -114,23 +82,16 @@ def _valid_clarity(value):
     return value in CLARITY_WHITELIST
 
 
-def _valid_optional_grade(value):
-    return value is None or value in GRADE_WHITELIST
-
-
-def _valid_optional_fluorescence(value):
-    return value is None or value in FLUORESCENCE_WHITELIST
-
-
-def _valid_optional_report_type(value):
-    return value is None or value in REPORT_TYPE_WHITELIST
+def _valid_report_type(value):
+    return value in REPORT_TYPE_WHITELIST
 
 
 def validate_fields(fields: dict, barcode_value: str | None) -> dict:
     """Return a copy of `fields` with `igi_report_no` overridden by a decoded
     barcode value (authoritative) when available, plus a computed `needs_review`
-    flag: True if any critical field is missing/invalid, or if ANY field
-    (critical or not) fails its expected format/whitelist check."""
+    flag: True if any field is missing or fails its expected format/whitelist
+    check. Every field here is critical -- this app only tracks the fields the
+    user actually needs (IGI number, shape, carat, color, clarity, report type)."""
     result = dict(fields)
     if barcode_value:
         result["igi_report_no"] = barcode_value
@@ -141,14 +102,8 @@ def validate_fields(fields: dict, barcode_value: str | None) -> dict:
         "carat": _valid_carat(result.get("carat")),
         "color": _valid_color(result.get("color")),
         "clarity": _valid_clarity(result.get("clarity")),
-        "cut": _valid_optional_grade(result.get("cut")),
-        "polish": _valid_optional_grade(result.get("polish")),
-        "symmetry": _valid_optional_grade(result.get("symmetry")),
-        "fluorescence": _valid_optional_fluorescence(result.get("fluorescence")),
-        "report_type": _valid_optional_report_type(result.get("report_type")),
+        "report_type": _valid_report_type(result.get("report_type")),
     }
 
-    critical_missing = any(not checks[field] for field in CRITICAL_FIELDS)
-    any_invalid = any(not ok for ok in checks.values())
-    result["needs_review"] = bool(critical_missing or any_invalid)
+    result["needs_review"] = any(not ok for ok in checks.values())
     return result
