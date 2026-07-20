@@ -25,7 +25,10 @@ st.caption(
 uploaded_files = st.file_uploader(
     "Upload tag photos", type=["jpg", "jpeg", "png"], accept_multiple_files=True,
 )
-camera_photo = st.camera_input("Or take a photo")
+
+camera_column, _spacer_column = st.columns([1, 2])
+with camera_column:
+    camera_photo = st.camera_input("Or take a photo")
 
 candidates = []
 if uploaded_files:
