@@ -41,6 +41,13 @@ def test_parse_fields_returns_none_for_missing_fields():
     assert fields["shape"] is None
 
 
+def test_parse_fields_matches_shape_with_trailing_ocr_noise_on_same_line():
+    # Real OCR output on a genuine tag photo included a stray trailing
+    # character on the shape line ("EMERALD #") rather than a clean match.
+    fields = parsing.parse_fields("EMERALD #")
+    assert fields["shape"] == "EMERALD"
+
+
 def test_validate_fields_prefers_barcode_value_over_ocr_value():
     fields = {
         "lot_ref_no": "C141619", "igi_report_no": "809614206", "report_type": "CVD",

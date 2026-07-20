@@ -54,9 +54,11 @@ def parse_fields(raw_text: str) -> dict:
             fields["color"], fields["clarity"] = cc_match.group(1), cc_match.group(2)
             continue
 
-        if fields["shape"] is None and upper in SHAPE_WHITELIST:
-            fields["shape"] = upper
-            continue
+        if fields["shape"] is None:
+            shape_tokens = [token for token in re.findall(r"[A-Z]+", upper) if token in SHAPE_WHITELIST]
+            if shape_tokens:
+                fields["shape"] = shape_tokens[0]
+                continue
 
         if fields["lot_ref_no"] is None and _LOT_REF_RE.match(upper):
             fields["lot_ref_no"] = upper

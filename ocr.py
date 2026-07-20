@@ -14,4 +14,8 @@ def configure_tesseract() -> None:
 
 
 def run_ocr(image) -> str:
-    return pytesseract.image_to_string(image)
+    # IGI tags mix short, scattered grading-field text with barcode/QR graphics.
+    # The default PSM (fully automatic layout analysis) classifies that sparse
+    # text-near-graphics region as non-text and skips it entirely on real tag
+    # photos; --psm 11 (sparse text, no particular order) picks it up instead.
+    return pytesseract.image_to_string(image, config="--psm 11")

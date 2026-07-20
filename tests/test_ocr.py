@@ -17,14 +17,16 @@ def test_configure_tesseract_is_noop_when_env_var_absent(monkeypatch):
     assert pytesseract.pytesseract.tesseract_cmd == "tesseract"
 
 
-def test_run_ocr_delegates_to_pytesseract(monkeypatch):
+def test_run_ocr_delegates_to_pytesseract_with_sparse_text_psm(monkeypatch):
     captured = {}
 
-    def fake_image_to_string(image):
+    def fake_image_to_string(image, config=None):
         captured["image"] = image
+        captured["config"] = config
         return "  some ocr text  "
 
     monkeypatch.setattr(pytesseract, "image_to_string", fake_image_to_string)
     result = ocr.run_ocr("fake-image-object")
     assert result == "  some ocr text  "
     assert captured["image"] == "fake-image-object"
+    assert captured["config"] == "--psm 11"
