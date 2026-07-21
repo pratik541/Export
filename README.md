@@ -46,6 +46,19 @@ remove the `*_model_dir` arguments in `ocr.py`'s `get_reader()`, and run the
 app once with internet access — PaddleX will download to its own cache
 (`~/.paddlex/official_models/`) that you can then copy back into `models/`.
 
+`requirements.txt` pins every dependency to an exact version deliberately,
+not just as a style choice: PP-OCRv6 (the model family bundled in `models/`)
+was only introduced in `paddleocr` 3.7.0. An earlier deploy with unpinned
+versions installed correctly but resolved an older `paddlex` that had never
+heard of `PP-OCRv6_tiny_det` (`ClassNotFoundException: 'PP-OCRv6_tiny_det' is
+not registered on BasePredictor`), despite the exact same `pip install`
+working fine locally. Exact pins keep what deploys identical to what's been
+tested. If you deliberately want to move to a newer `paddleocr` release later
+(e.g. for a newer/better model), re-verify locally first the same way this
+was verified — a fresh, no-cache environment installing only from
+`requirements.txt`, then real inference against `tests/fixtures/` — before
+changing the pins.
+
 ## Using a phone as the camera (optional)
 
 `st.camera_input()` uses whatever camera the browser can see — it doesn't have to

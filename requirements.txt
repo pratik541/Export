@@ -1,8 +1,9 @@
-streamlit
-paddlepaddle
-paddleocr
-opencv-python-headless
-pyzbar
-pandas
-openpyxl
-Pillow
+streamlit==1.59.2
+paddlepaddle==3.3.1
+paddleocr==3.7.0
+paddlex==3.7.2
+opencv-python-headless==5.0.0.93
+pyzbar==0.1.9
+pandas==3.0.3
+openpyxl==3.1.5
+Pillow==12.3.0
