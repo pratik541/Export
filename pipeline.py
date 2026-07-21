@@ -29,7 +29,11 @@ def process_image(image_bytes: bytes, filename: str) -> dict:
 
     preprocessed = imaging.preprocess(image)
     decoded = decoding.decode_barcodes(image, preprocessed)
-    raw_text = ocr.run_ocr(preprocessed)
+    # PaddleOCR's detection model expects a natural photo and does its own
+    # preprocessing internally -- our binarized single-channel output
+    # actively crashes it (and generally recognizes worse even where it
+    # doesn't). `preprocessed` is still useful for barcode/QR decoding above.
+    raw_text = ocr.run_ocr(image)
     fields = parsing.parse_fields(raw_text)
     validated = parsing.validate_fields(fields, decoded["barcode_value"])
 

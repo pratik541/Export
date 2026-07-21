@@ -32,6 +32,28 @@ def test_process_image_returns_rejected_when_quality_gate_fails(monkeypatch):
     assert result["reason"] == "Image too blurry — please retake."
 
 
+def test_process_image_runs_ocr_on_the_original_color_image_not_the_preprocessed_one(monkeypatch):
+    # PaddleOCR's detection model expects a natural 3-channel image and
+    # crashes outright on our single-channel thresholded preprocessing
+    # output -- ocr.run_ocr must always be called with the original image.
+    monkeypatch.setattr(pipeline.quality, "assess_quality", lambda image, ocr_func: (True, None))
+    monkeypatch.setattr(
+        pipeline.decoding, "decode_barcodes",
+        lambda *images, **kwargs: {"barcode_value": None, "qr_values": []},
+    )
+    captured = {}
+
+    def fake_run_ocr(image):
+        captured["ndim"] = image.ndim
+        return ""
+
+    monkeypatch.setattr(pipeline.ocr, "run_ocr", fake_run_ocr)
+
+    pipeline.process_image(_synthetic_image_bytes(), "tag1.jpg")
+
+    assert captured["ndim"] == 3
+
+
 def test_process_image_builds_full_row_on_success(monkeypatch):
     monkeypatch.setattr(pipeline.quality, "assess_quality", lambda image, ocr_func: (True, None))
     monkeypatch.setattr(

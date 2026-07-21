@@ -14,9 +14,9 @@ REPORT_TYPE_WHITELIST = {"CVD", "HPHT", "NATURAL", "TREATED"}
 
 CRITICAL_FIELDS = ("igi_report_no", "shape", "carat", "color", "clarity", "report_type")
 
-_CARAT_RE = re.compile(r"^\d+\.\d{2}$")
+_CARAT_RE = re.compile(r"(?<!\d)(\d+\.\d{2})(?!\d)")
 _COLOR_CLARITY_RE = re.compile(
-    r"^([D-Z])\s+(FL|IF|VVS1|VVS2|VS1|VS2|SI1|SI2|SI3|I1|I2|I3)$"
+    r"([D-Z])\s+(FL|IF|VVS1|VVS2|VS1|VS2|SI1|SI2|SI3|I1|I2|I3)$"
 )
 _IGI_CERT_RE = re.compile(r"IGI\s*CERT\s*-?\s*(\d{8,10})", re.IGNORECASE)
 _WORD_RE = re.compile(r"[A-Za-z]+")
@@ -67,11 +67,12 @@ def parse_fields(raw_text: str) -> dict:
             continue
         upper = line.upper()
 
-        if fields["carat"] is None and _CARAT_RE.match(line):
-            fields["carat"] = line
+        carat_match = _CARAT_RE.search(line)
+        if fields["carat"] is None and carat_match:
+            fields["carat"] = carat_match.group(1)
             continue
 
-        cc_match = _COLOR_CLARITY_RE.match(upper)
+        cc_match = _COLOR_CLARITY_RE.search(upper)
         if fields["color"] is None and cc_match:
             fields["color"], fields["clarity"] = cc_match.group(1), cc_match.group(2)
             continue
@@ -101,7 +102,7 @@ def _valid_shape(value):
 
 
 def _valid_carat(value):
-    return bool(value) and bool(_CARAT_RE.match(value))
+    return bool(value) and bool(re.fullmatch(r"\d+\.\d{2}", value))
 
 
 def _valid_color(value):

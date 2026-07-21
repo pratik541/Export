@@ -17,18 +17,15 @@ results in an editable table, and exports them to an Excel file.
    source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate igi-ocr   # Git Bash; on Windows cmd/PowerShell use `conda activate igi-ocr` directly
    pip install -r requirements-dev.txt
    ```
-3. Install the Tesseract OCR binary (required by `pytesseract`):
-   - **Windows**: install from https://github.com/UB-Mannheim/tesseract/wiki. If it's
-     not on your PATH, set an environment variable before launching the app:
-     `export TESSERACT_CMD="/c/Program Files/Tesseract-OCR/tesseract.exe"`
-   - **macOS**: `brew install tesseract`
-   - **Linux (Debian/Ubuntu)**: `sudo apt-get install tesseract-ocr`
-4. Install the zbar shared library (required by `pyzbar`) if barcode decoding
+3. Install the zbar shared library (required by `pyzbar`) if barcode decoding
    fails to import on your platform — on Windows the `pyzbar` wheel bundles the
    required DLLs, so this is usually only needed on Linux
    (`sudo apt-get install libzbar0`).
-5. Run the tests: `pytest`
-6. Run the app: `streamlit run app.py`
+4. Run the tests: `pytest`
+5. Run the app: `streamlit run app.py`. The first run downloads PaddleOCR's
+   model weights (a few minutes, needs internet access); after that they're
+   cached locally and load in a couple of seconds. The app shows a loading
+   spinner while this happens.
 
 ## Using a phone as the camera (optional)
 
@@ -42,10 +39,18 @@ can select. No app configuration is needed for this.
 
 1. Push this repo to GitHub.
 2. Create a new app on https://share.streamlit.io pointing at `app.py`.
-3. Streamlit Cloud installs `requirements.txt` (Python deps) and `packages.txt`
-   (system packages: `tesseract-ocr`, `libzbar0`) automatically — no manual
-   server setup needed, and no `TESSERACT_CMD` override is required there since
-   `tesseract` is already on `PATH` after the `packages.txt` install.
+3. Streamlit Cloud installs `requirements.txt` (Python deps, including
+   `paddlepaddle`/`paddleocr`) and `packages.txt` (system package: `libzbar0`)
+   automatically — no manual server setup needed.
+4. **Deployment risk worth knowing about:** `paddlepaddle` is a full deep
+   learning framework — installed, it and its dependencies run several
+   hundred MB, on top of the model weights PaddleOCR downloads on first use.
+   That's a real risk of exceeding Streamlit Community Cloud's free-tier
+   build size / memory limits. This hasn't been verified against an actual
+   free-tier deployment; if it doesn't fit, the fallback is a paid tier, a
+   different host with more headroom (e.g. a small VM or container), or
+   reverting to the lighter (but less accurate) Tesseract-based approach from
+   an earlier point in this project's history.
 
 ## Known limitations
 

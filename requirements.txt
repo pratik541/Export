@@ -1,5 +1,6 @@
 streamlit
-pytesseract
+paddlepaddle
+paddleocr
 opencv-python-headless
 pyzbar
 pandas

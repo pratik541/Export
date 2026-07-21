@@ -9,7 +9,11 @@ import ocr
 import pipeline
 
 st.set_page_config(page_title="IGI Tag Scanner", layout="wide")
-ocr.configure_tesseract()
+
+if "ocr_reader_ready" not in st.session_state:
+    with st.spinner("Loading OCR model (first run on this machine may take a few minutes to download)..."):
+        ocr.get_reader()
+    st.session_state.ocr_reader_ready = True
 
 st.session_state.setdefault("rows", [])
 st.session_state.setdefault("processed_keys", set())

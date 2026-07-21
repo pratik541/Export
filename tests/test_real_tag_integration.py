@@ -15,6 +15,12 @@ REAL_TAG_CASES = [
     ("tag_e84454_emerald.jpeg", "804633671", "CVD", "EMERALD", "2.97", "E", "VVS1"),
     ("tag_c141641_heart.jpeg", "817634109", "CVD", "HEART", "1.00", "F", "VS1"),
     ("tag_e86943_oval.jpeg", "809609517", "CVD", "OVAL", "1.00", "D", "VVS1"),
+    # Tightly-cropped versions of three of the tags above -- with PaddleOCR
+    # these extract every field correctly (needs_review=False), unlike the
+    # original Tesseract-based pipeline which struggled even on crops.
+    ("tag_c141619_emerald_cropped.jpeg", "809614206", "CVD", "EMERALD", "3.01", "E", "VS1"),
+    ("tag_c141641_heart_cropped.jpeg", "817634109", "CVD", "HEART", "1.00", "F", "VS1"),
+    ("tag_e86943_oval_cropped.jpeg", "809609517", "CVD", "OVAL", "1.00", "D", "VVS1"),
 ]
 
 

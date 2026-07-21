@@ -29,11 +29,38 @@ def test_parse_fields_returns_none_for_missing_fields():
     assert fields["report_type"] is None
 
 
+def test_parse_fields_matches_carat_with_trailing_ocr_noise_on_same_line():
+    # Seen on real cropped tag photos with PaddleOCR: the carat value's row
+    # picked up "VIDEO"/"VID" noise from the nearby "Video Link" label
+    # ("1.00 VIDEO", "3.01 VID") rather than sitting alone on its line.
+    fields = parsing.parse_fields("1.00 VIDEO")
+    assert fields["carat"] == "1.00"
+
+
+def test_parse_fields_does_not_match_carat_inside_a_longer_number():
+    # A decimal-looking substring embedded in a longer digit run (e.g. part
+    # of a barcode/report number) must not be mistaken for the carat value.
+    fields = parsing.parse_fields("12309614.206")
+    assert fields["carat"] is None
+
+
 def test_parse_fields_matches_shape_with_trailing_ocr_noise_on_same_line():
     # Real OCR output on a genuine tag photo included a stray trailing
     # character on the shape line ("EMERALD #") rather than a clean match.
     fields = parsing.parse_fields("EMERALD #")
     assert fields["shape"] == "EMERALD"
+
+
+def test_parse_fields_matches_color_clarity_with_leading_ocr_noise_on_same_line():
+    # Seen with PaddleOCR: a detected "CERT Link" text box sometimes gets an
+    # abnormally tall bounding box whose vertical center lands close enough
+    # to the color/clarity row that row-grouping merges them onto one line
+    # ("CERT Link D VVS2"). The color/clarity pattern must still find the
+    # match even though it isn't at the start of the line -- same tolerance
+    # `shape` already has for surrounding noise.
+    fields = parsing.parse_fields("CERT Link D VVS2")
+    assert fields["color"] == "D"
+    assert fields["clarity"] == "VVS2"
 
 
 def test_parse_fields_accepts_marouise_as_misread_of_marquise():
