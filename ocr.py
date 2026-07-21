@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 # Works around a NotImplementedError crash in some PaddlePaddle CPU builds'
 # oneDNN (MKL-DNN) backend ("ConvertPirAttribute2RuntimeAttribute not support
@@ -9,22 +10,37 @@ os.environ.setdefault("PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT", "False")
 import cv2
 from paddleocr import PaddleOCR
 
+_MODELS_DIR = Path(__file__).parent / "models"
+
 _reader = None
 
 
 def get_reader() -> PaddleOCR:
     """Lazily create and cache the PaddleOCR reader -- constructing it loads
     model weights, so it must not happen at import time (every test would pay
-    for it) or more than once."""
+    for it) or more than once.
+
+    Model files are bundled in models/ and loaded from there via
+    *_model_dir, not fetched at runtime: PaddleX's default behavior tries to
+    resolve/download models from a remote hub (HuggingFace/ModelScope/AIStudio/
+    BOS) on every fresh environment, which failed outright when deployed
+    ("No model source is available for model `PP-OCRv6_tiny_det`") because
+    that hosting environment's network couldn't reach any of them. Passing
+    *_model_dir avoids that lookup entirely. *_model_name must still be given
+    alongside it -- without it, PaddleX assumes a *different* default model
+    name (the full "medium" model) and then rejects our tiny-model directory
+    for not matching that assumed name.
+    """
     global _reader
     if _reader is None:
         _reader = PaddleOCR(
             text_detection_model_name="PP-OCRv6_tiny_det",
+            text_detection_model_dir=str(_MODELS_DIR / "PP-OCRv6_tiny_det"),
             text_recognition_model_name="PP-OCRv6_tiny_rec",
+            text_recognition_model_dir=str(_MODELS_DIR / "PP-OCRv6_tiny_rec"),
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=False,
-            lang="en",
         )
     return _reader
 

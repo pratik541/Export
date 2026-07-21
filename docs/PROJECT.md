@@ -96,6 +96,18 @@ same set of real tag photos (`tests/fixtures/`) rather than assumed:
    fields correct across the real photo set (9 photos, including 3 tightly
    cropped ones), 0 ever wrong.
 
+   Two deployment-specific issues surfaced when actually pushing this to
+   Streamlit Community Cloud, neither a bug in this project's own code:
+   `paddlepaddle` only publishes wheels for Python 3.9–3.13, and the platform
+   was observed defaulting new deployments to a newer version regardless of
+   its documented default — fixed by explicitly setting Python 3.11 in the
+   app's "Advanced settings" (see `README.md`). Separately, PaddleX (the
+   library backing PaddleOCR) defaults to resolving/downloading models from a
+   remote hub at runtime, which failed outright in that sandboxed environment
+   (`No model source is available for model 'PP-OCRv6_tiny_det'`) — fixed by
+   bundling the ~6.5MB model files directly in `models/` and loading them via
+   `*_model_dir` instead, verified to work with no network access at all.
+
 PaddleOCR returns one detection per text fragment (a bounding box + text +
 confidence), not one continuous text block the way Tesseract does. `ocr.py`
 reconstructs printed lines by grouping fragments whose vertical centers are
