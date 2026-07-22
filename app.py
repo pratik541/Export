@@ -21,7 +21,7 @@ if "ocr_reader_ready" not in st.session_state:
         ocr.get_reader()
     st.session_state.ocr_reader_ready = True
 
-st.session_state.setdefault("items", [])          # list of item dicts (see capture.build_item)
+st.session_state.setdefault("gallery_items", [])          # list of item dicts (see capture.build_item)
 st.session_state.setdefault("seen_hashes", set())  # dedupe by original-bytes hash
 st.session_state.setdefault("next_id", 1)
 st.session_state.setdefault("recrop_id", None)     # id of the item currently being manually re-cropped
@@ -43,7 +43,7 @@ def _add_image(data: bytes, filename: str, source: str):
         st.warning(f"{filename}: {exc}")
         st.session_state.seen_hashes.add(digest)
         return
-    st.session_state.items.append(item)
+    st.session_state.gallery_items.append(item)
     st.session_state.seen_hashes.add(digest)
     st.session_state.next_id += 1
 
@@ -64,7 +64,7 @@ if shot is not None:
 
 
 def _item_by_id(item_id):
-    return next((it for it in st.session_state.items if it["id"] == item_id), None)
+    return next((it for it in st.session_state.gallery_items if it["id"] == item_id), None)
 
 
 def _run_ocr(item):
@@ -101,10 +101,10 @@ if st.session_state.recrop_id is not None:
             st.rerun()
 
 # --- Gallery ---
-if st.session_state.items:
+if st.session_state.gallery_items:
     st.subheader("Captured tags")
     if st.button("Run OCR on all"):
-        pending = [it for it in st.session_state.items if it["ocr_result"] is None]
+        pending = [it for it in st.session_state.gallery_items if it["ocr_result"] is None]
         progress = st.progress(0.0, text="Running OCR...")
         for i, it in enumerate(pending):
             _run_ocr(it)
@@ -112,8 +112,8 @@ if st.session_state.items:
         progress.empty()
 
     cols_per_row = 4
-    for row_start in range(0, len(st.session_state.items), cols_per_row):
-        row_items = st.session_state.items[row_start:row_start + cols_per_row]
+    for row_start in range(0, len(st.session_state.gallery_items), cols_per_row):
+        row_items = st.session_state.gallery_items[row_start:row_start + cols_per_row]
         cols = st.columns(cols_per_row)
         for col, it in zip(cols, row_items):
             with col:
@@ -135,7 +135,7 @@ if st.session_state.items:
                     st.rerun()
 
 # --- Results table + export (only OCR'd, accepted items) ---
-ocr_rows = [it["ocr_result"] for it in st.session_state.items
+ocr_rows = [it["ocr_result"] for it in st.session_state.gallery_items
             if it["ocr_result"] is not None and it["ocr_result"].get("accepted")]
 if ocr_rows:
     st.subheader("Results")
@@ -153,5 +153,5 @@ if ocr_rows:
         file_name=f"tag_scan_results_{timestamp}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
-elif not st.session_state.items:
+elif not st.session_state.gallery_items:
     st.info("Upload or capture tag photos to get started.")
