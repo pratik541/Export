@@ -85,15 +85,17 @@ if st.session_state.recrop_id is not None:
                                  aspect_ratio=None, key=f"cropper_{item['id']}")
         col_ok, col_cancel = st.columns(2)
         if col_ok.button("Use this crop", key=f"usecrop_{item['id']}"):
-            arr = cv2.cvtColor(np.array(cropped_pil), cv2.COLOR_RGB2BGR)
+            arr = cv2.cvtColor(np.array(cropped_pil.convert("RGB")), cv2.COLOR_RGB2BGR)
             ok, buf = cv2.imencode(".jpg", arr)
             if ok:
                 item["cropped_bytes"] = buf.tobytes()
                 item["auto_cropped"] = False
                 item["crop_box"] = None      # manual crop; box coords no longer tracked
                 item["ocr_result"] = None    # re-crop invalidates any prior OCR
-            st.session_state.recrop_id = None
-            st.rerun()
+                st.session_state.recrop_id = None
+                st.rerun()
+            else:
+                st.warning("Could not process the crop — please try again.")
         if col_cancel.button("Cancel", key=f"cancelcrop_{item['id']}"):
             st.session_state.recrop_id = None
             st.rerun()
