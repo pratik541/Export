@@ -48,6 +48,17 @@ def test_app_renders_gallery_with_an_item_present():
     assert not at.exception
 
 
+def test_app_emits_camera_positioning_guide_css():
+    # The positioning-guide box is injected CSS targeting the keyed container's
+    # `st-key-camera_guide` class. Assert it's actually emitted so the guide
+    # can't silently vanish (visual alignment still needs manual browser check).
+    at = AppTest.from_file("app.py", default_timeout=120)
+    at.run()
+    assert not at.exception
+    all_markdown = " ".join(m.value for m in at.markdown)
+    assert "st-key-camera_guide" in all_markdown
+
+
 def test_app_renders_results_table_for_an_ocrd_item():
     # An accepted OCR result should render the results table + export without error.
     ocr_result = {

@@ -16,6 +16,31 @@ import pipeline
 
 st.set_page_config(page_title="IGI Tag Scanner", layout="wide")
 
+# Positioning-guide box drawn over the camera widget's live preview. Targets the
+# keyed container's stable `st-key-camera_guide` class (a documented Streamlit
+# class we set), not Streamlit's internal auto-generated classes. pointer-events
+# is none so the box never intercepts clicks on the "Take Photo" button. This is
+# a visual aid only — approximate alignment, and if a future Streamlit version
+# restructures the camera widget the box may misposition but cannot break the app.
+_CAMERA_GUIDE_CSS = """
+<style>
+.st-key-camera_guide { position: relative; }
+.st-key-camera_guide::after {
+    content: "";
+    position: absolute;
+    top: 42%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 78%;
+    aspect-ratio: 2 / 1;
+    border: 3px dashed #00e000;
+    border-radius: 8px;
+    pointer-events: none;
+    z-index: 10;
+}
+</style>
+"""
+
 if "ocr_reader_ready" not in st.session_state:
     with st.spinner("Loading OCR model (first run may take a few minutes to download)..."):
         ocr.get_reader()
@@ -58,7 +83,13 @@ if uploaded_files:
 
 camera_col, _ = st.columns([1, 2])
 with camera_col:
-    shot = st.camera_input("Or take a photo", resolution="1080p")
+    st.markdown(_CAMERA_GUIDE_CSS, unsafe_allow_html=True)
+    with st.container(key="camera_guide"):
+        shot = st.camera_input("Or take a photo", resolution="1080p")
+    st.caption(
+        "Fill the box with the tag · hold it flat and steady · "
+        "~15–30 cm away · avoid glare on the label"
+    )
 if shot is not None:
     _add_image(shot.getvalue(), f"camera_capture_{st.session_state.next_id}.jpg", "camera")
 
