@@ -3,10 +3,17 @@
 ## What this is
 
 A Streamlit app for batch-digitizing IGI diamond grading report tags. A user
-uploads photos (or captures them with a camera) of one or more tags, the app
-extracts the report number, report type, shape, carat, color, and clarity
-from each, shows the results in an editable table, and exports them to a
-timestamped Excel file.
+uploads photos (or captures them with a camera) of one or more tags; each
+photo is auto-cropped to the label around its decoded barcode and placed in
+a thumbnail gallery, where it can be manually re-cropped and then OCR'd —
+per item or as a batch — to extract the report number, report type, shape,
+carat, color, and clarity. Results are shown in an editable table and
+exported to a timestamped Excel file.
+
+Capture and OCR are deliberately separate steps: capture (upload/camera +
+auto-crop) always happens immediately, but nothing is OCR'd until the user
+asks for it (per-item "OCR" or "Run OCR on all"). This lets a user review
+and fix a bad auto-crop *before* spending OCR time on it.
 
 The tags themselves are a standardized IGI layout: a barcode, two QR codes
 ("Cert Link", "Video Link"), and printed text for the report number, report
@@ -34,11 +41,42 @@ barcode.
 
 ## Pipeline
 
+Capture and OCR are two separate stages, connected by an auto-crop step —
+not one continuous pipeline run the instant a photo arrives.
+
+### 1. Capture (`capture.py` — `build_item`)
+
 ```
-photo bytes
+photo bytes (upload or camera)
+  -> decode to an image (reject if corrupt)
+  -> barcode/QR decode (pyzbar), on the original image
+  -> usable barcode box found?
+       yes -> crop to the label region anchored on that box
+              (`imaging.crop_to_label` / `imaging.label_crop_box`)
+       no  -> fall back to the full, uncropped image
+              (no barcode detected, or pyzbar returned a degenerate
+              zero-width/zero-height box)
+  -> gallery item: {id, source, filename, original_bytes, cropped_bytes,
+     crop_box, auto_cropped, ocr_result=None}
+```
+
+The item is now sitting in the gallery, cropped but **not yet OCR'd**
+(`ocr_result` starts `None`). The user can leave the auto-crop as-is, or
+discard it and drag a manual box instead (`streamlit-cropper`, in `app.py`)
+— a manual re-crop clears `ocr_result` so a stale result from before the
+re-crop is never mistaken for current.
+
+### 2. OCR, on demand (`pipeline.process_image`)
+
+Triggered per item ("OCR" button) or in a batch ("Run OCR on all", which
+processes every item whose `ocr_result` is still `None`) — never
+automatically:
+
+```
+item's cropped_bytes
   -> decode to an image (reject if corrupt)
   -> quality gate: blur check, exposure check, text-presence check
-     (reject with a retake message if any fail — never enters the batch)
+     (reject with a retake message if any fail — never enters the results table)
   -> OpenCV preprocessing (grayscale, denoise, adaptive threshold)
      -- used only for barcode/QR decoding, not for OCR (see below)
   -> barcode/QR decode (pyzbar), tried on both the original and the
@@ -48,6 +86,15 @@ photo bytes
   -> per-field validation -> needs_review flag
   -> one row in the results table
 ```
+
+**Cropping measurably improves accuracy.** Feeding PaddleOCR a tightly
+cropped label instead of a full frame removes background clutter that both
+the quality gate and the detection model otherwise have to wade through: on
+this project's tightly-cropped test fixtures, tracked-field accuracy
+measured **~100%**, versus ~78–94% on full, uncropped frames across the
+three OCR engines evaluated (see "OCR engine" below). This is the main
+motivation for auto-cropping to the label before OCR rather than OCR'ing the
+raw capture.
 
 ### `needs_review`
 
@@ -61,10 +108,11 @@ the export."
 
 | File | Responsibility |
 |---|---|
-| `app.py` | Streamlit UI: file upload + camera input, session-state batch tracking, results table, Excel download |
-| `pipeline.py` | `process_image(image_bytes, filename)` — orchestrates one image through the full pipeline above |
+| `app.py` | Streamlit UI: file upload + camera input feeding a gallery, manual re-crop overlay (`streamlit-cropper`), per-item/"OCR all" triggers, results table, Excel download |
+| `capture.py` | `build_item(image_bytes, filename, source, item_id)` — turns raw capture bytes into a gallery item: decodes the barcode, auto-crops to the label when a usable box is found (else falls back to the full image), does **not** run OCR |
+| `pipeline.py` | `process_image(image_bytes, filename)` — orchestrates one (already-cropped) image through the OCR stage above |
 | `quality.py` | The pre-OCR quality gate (blur/exposure/text-presence checks) |
-| `imaging.py` | OpenCV preprocessing (grayscale, denoise, adaptive threshold) — used for barcode/QR decoding only |
+| `imaging.py` | OpenCV preprocessing (grayscale, denoise, adaptive threshold) — used for barcode/QR decoding only; also `crop_to_label`/`label_crop_box`, the barcode-anchored auto-crop used by `capture.py` |
 | `decoding.py` | Barcode/QR decoding via `pyzbar` |
 | `ocr.py` | OCR via PaddleOCR, plus the row-reconstruction logic that turns its per-text-box detections into printed lines |
 | `parsing.py` | Regex/whitelist field extraction and validation |

@@ -5,6 +5,37 @@ decodes the barcode (authoritative IGI report number), OCRs the printed grading
 fields (report type, shape, carat, color, clarity), lets you review/correct
 results in an editable table, and exports them to an Excel file.
 
+Capture and OCR are separate steps. Each uploaded or camera-captured photo is
+auto-cropped to the label around its decoded barcode and dropped into a
+thumbnail gallery — nothing is OCR'd automatically the instant a photo
+arrives. From the gallery you can accept the auto-crop, drag a manual crop
+box instead if it missed (via `streamlit-cropper`), and then run OCR either
+per item or on the whole batch at once with "Run OCR on all". See "How it
+works" below for the full flow.
+
+## How it works
+
+1. **Capture** — upload one or more files, and/or take a photo with
+   `st.camera_input()`. Both feed the same gallery.
+2. **Auto-crop** — each photo is decoded, its barcode located, and the image
+   cropped to the label region anchored on that barcode position
+   (`imaging.crop_to_label`, called from `capture.build_item`). If no usable
+   barcode box is found (undetected or a degenerate zero-size box), the item
+   falls back to the full, uncropped photo instead of failing.
+3. **Gallery** — every captured photo appears as a thumbnail (the cropped
+   version) with a status: not yet scanned, OK, needs review, or failed, plus
+   a note if auto-crop couldn't find a barcode.
+4. **Manual re-crop (optional)** — click "Re-crop" on any thumbnail to drag a
+   box over the original photo yourself, using `streamlit-cropper`. This
+   replaces the auto-crop and clears any existing OCR result for that item,
+   so a stale result is never shown as current.
+5. **OCR, on demand** — click "OCR" on an individual thumbnail, or "Run OCR
+   on all" to process every item that hasn't been OCR'd yet. Only OCR'd,
+   accepted items appear in the results table below the gallery.
+
+Cropping tightly to the label also measurably improves OCR accuracy — see
+`docs/PROJECT.md` for the numbers.
+
 ## Local setup
 
 1. Install [Miniconda/Anaconda](https://docs.conda.io/en/latest/miniconda.html)
