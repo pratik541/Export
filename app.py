@@ -32,7 +32,11 @@ uploaded_files = st.file_uploader(
 
 camera_column, _spacer_column = st.columns([1, 2])
 with camera_column:
-    camera_photo = st.camera_input("Or take a photo")
+    # resolution="1080p" is a request, not a guarantee -- but it matters here:
+    # left at the default (None), capture resolution ties to the widget's
+    # on-screen display size, so shrinking the widget's visual footprint
+    # (below) would otherwise silently shrink captured photo resolution too.
+    camera_photo = st.camera_input("Or take a photo", resolution="1080p")
 
 candidates = []
 if uploaded_files:
@@ -70,7 +74,7 @@ if st.session_state.rows:
     results_df.insert(
         0, "review", results_df["needs_review"].map(lambda flagged: "⚠️ Review" if flagged else "✅ OK")
     )
-    edited_df = st.data_editor(results_df, num_rows="dynamic", use_container_width=True)
+    edited_df = st.data_editor(results_df, num_rows="dynamic", width="stretch")
 
     excel_bytes = excel_export.build_excel_bytes(edited_df)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
