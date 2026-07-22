@@ -82,22 +82,29 @@ can select. No app configuration is needed for this.
    `runtime.txt` controls on Streamlit Community Cloud — the Python version
    is set via that "Advanced settings" dropdown only.
 4. Streamlit Cloud installs `requirements.txt` (Python deps) and `packages.txt`
-   (system packages: `libzbar0` for barcode decoding, `libgl1` for OpenCV —
-   see next point for why) automatically — no manual server setup needed.
-5. **`libgl1` is required even though this project only specifies
-   `opencv-python-headless`** (deliberately, to avoid exactly this).
+   (system packages: `libzbar0` for barcode decoding, `libgl1` +
+   `libglib2.0-0t64` for OpenCV — see next point for why) automatically — no
+   manual server setup needed.
+5. **`libgl1`/`libglib2.0-0t64` are required even though this project only
+   specifies `opencv-python-headless`** (deliberately, to avoid exactly this).
    `paddlex`'s `ocr-core` extra (required by `paddleocr`) hard-pins
    `opencv-contrib-python` — the *non*-headless build, which needs graphics
    libraries a minimal container doesn't have — regardless of what this
    project's own `requirements.txt` says. There's no way to override that
-   from here; `paddlex` requires that exact package by name. Without it the
-   app fails at import time with `ImportError: libGL.so.1: cannot open
-   shared object file`. Don't also add `libglib2.0-0` here even though some
-   OpenCV/Streamlit troubleshooting guides suggest it — as of this writing,
-   Streamlit Community Cloud's base image can't install it at all (`Depends:
-   libffi7 ... but it is not installable`), which fails the *entire*
-   `packages.txt` install, including `libzbar0` and `libgl1` along with it.
-   `libgl1` alone is sufficient.
+   from here; `paddlex` requires that exact package by name. Without them the
+   app fails at import time, first with `ImportError: libGL.so.1: cannot open
+   shared object file` (fixed by `libgl1`), then `ImportError:
+   libgthread-2.0.so.0: cannot open shared object file` (fixed by
+   `libglib2.0-0t64`).
+
+   Specifically **`libglib2.0-0t64`, not `libglib2.0-0`**: Streamlit
+   Community Cloud's current base image runs Debian trixie, where this
+   package was renamed with a `t64` suffix (part of Debian's 64-bit time_t
+   migration) and now depends on `libffi8`. The old name `libglib2.0-0`
+   still exists as a leftover bullseye-security package that depends on the
+   unavailable `libffi7` instead, and requesting it by that name fails the
+   *entire* `packages.txt` install (including `libzbar0` and `libgl1` along
+   with it) with `Depends: libffi7 ... but it is not installable`.
 6. **Deployment risk still worth knowing about:** `paddlepaddle` is a full
    deep learning framework — installed, it and its dependencies run several
    hundred MB. That's a real risk of exceeding Streamlit Community Cloud's
