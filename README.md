@@ -81,10 +81,20 @@ can select. No app configuration is needed for this.
    requirement paddlepaddle (from versions: none)`. This is not something
    `runtime.txt` controls on Streamlit Community Cloud — the Python version
    is set via that "Advanced settings" dropdown only.
-4. Streamlit Cloud installs `requirements.txt` (Python deps, including
-   `paddlepaddle`/`paddleocr`) and `packages.txt` (system package: `libzbar0`)
-   automatically — no manual server setup needed.
-5. **Deployment risk still worth knowing about:** `paddlepaddle` is a full
+4. Streamlit Cloud installs `requirements.txt` (Python deps) and `packages.txt`
+   (system packages: `libzbar0` for barcode decoding, `libgl1`/`libglib2.0-0`
+   for OpenCV — see next point for why) automatically — no manual server
+   setup needed.
+5. **`libgl1`/`libglib2.0-0` are required even though this project only
+   specifies `opencv-python-headless`** (deliberately, to avoid exactly this).
+   `paddlex`'s `ocr-core` extra (required by `paddleocr`) hard-pins
+   `opencv-contrib-python` — the *non*-headless build, which needs graphics
+   libraries a minimal container doesn't have — regardless of what this
+   project's own `requirements.txt` says. There's no way to override that
+   from here; `paddlex` requires that exact package by name. Without those
+   two system packages the app fails at import time with `ImportError:
+   libGL.so.1: cannot open shared object file`.
+6. **Deployment risk still worth knowing about:** `paddlepaddle` is a full
    deep learning framework — installed, it and its dependencies run several
    hundred MB. That's a real risk of exceeding Streamlit Community Cloud's
    free-tier build size / memory limits. If the build itself fails or the app
