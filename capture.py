@@ -18,9 +18,11 @@ def _is_usable_box(box):
 
 
 def build_item(image_bytes: bytes, filename: str, source: str, item_id: int) -> dict:
-    """Turn raw image bytes into a gallery item: decode, auto-crop to the label
-    around the barcode when a usable box is found, and package the result. Does
-    NOT run OCR (ocr_result starts None). Raises ValueError on undecodable bytes."""
+    """Turn raw image bytes into a gallery item: decode, then crop for OCR.
+    Crop priority: (1) usable barcode box -> label crop; (2) no usable box but
+    source == "camera" -> guide-box region crop (matches the on-screen box);
+    (3) otherwise (e.g. uploads with no barcode) -> full image. Does NOT run OCR
+    (ocr_result starts None). Raises ValueError on undecodable bytes."""
     image = _decode_image_bytes(image_bytes)
     if image is None:
         raise ValueError("Could not read image file — it may be corrupt.")
@@ -28,16 +30,22 @@ def build_item(image_bytes: bytes, filename: str, source: str, item_id: int) -> 
     decoded = decoding.decode_barcodes(image)
     barcode_box = decoded.get("barcode_box")
 
+    crop_box = None
     if _is_usable_box(barcode_box):
         crop_box = imaging.label_crop_box(image, barcode_box)
-        cropped = imaging.crop_to_label(image, barcode_box)
-        ok, buf = cv2.imencode(".jpg", cropped)
-        cropped_bytes = buf.tobytes() if ok else image_bytes
-        auto_cropped = ok
+        ok, buf = cv2.imencode(".jpg", imaging.crop_to_label(image, barcode_box))
+        if ok:
+            cropped_bytes, crop_method = buf.tobytes(), "barcode"
+        else:
+            cropped_bytes, crop_method, crop_box = image_bytes, None, None
+    elif source == "camera":
+        ok, buf = cv2.imencode(".jpg", imaging.center_box_crop(image))
+        if ok:
+            cropped_bytes, crop_method = buf.tobytes(), "guide_box"
+        else:
+            cropped_bytes, crop_method = image_bytes, None
     else:
-        crop_box = None
-        cropped_bytes = image_bytes
-        auto_cropped = False
+        cropped_bytes, crop_method = image_bytes, None
 
     return {
         "id": item_id,
@@ -45,7 +53,8 @@ def build_item(image_bytes: bytes, filename: str, source: str, item_id: int) -> 
         "filename": filename,
         "original_bytes": image_bytes,
         "cropped_bytes": cropped_bytes,
-        "crop_box": crop_box if auto_cropped else None,
-        "auto_cropped": auto_cropped,
+        "crop_box": crop_box,
+        "crop_method": crop_method,
+        "auto_cropped": crop_method is not None,
         "ocr_result": None,
     }

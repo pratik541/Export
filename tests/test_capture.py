@@ -61,3 +61,39 @@ def test_build_item_falls_back_to_full_image_for_degenerate_barcode_box(monkeypa
     assert item["auto_cropped"] is False
     assert item["crop_box"] is None
     assert item["cropped_bytes"] == data
+
+
+def test_build_item_uses_guide_box_crop_for_camera_without_barcode(monkeypatch):
+    monkeypatch.setattr(
+        capture.decoding, "decode_barcodes",
+        lambda *a, **k: {"barcode_value": None, "qr_values": [], "barcode_box": None},
+    )
+    data = _image_bytes()
+    item = capture.build_item(data, "cam.jpg", "camera", 9)
+    assert item["crop_method"] == "guide_box"
+    assert item["auto_cropped"] is True
+    assert item["cropped_bytes"] != data      # a crop happened
+    assert item["crop_box"] is None           # box coords only tracked for barcode crop
+
+
+def test_build_item_upload_without_barcode_stays_full_image(monkeypatch):
+    monkeypatch.setattr(
+        capture.decoding, "decode_barcodes",
+        lambda *a, **k: {"barcode_value": None, "qr_values": [], "barcode_box": None},
+    )
+    data = _image_bytes()
+    item = capture.build_item(data, "up.jpg", "upload", 10)
+    assert item["crop_method"] is None
+    assert item["auto_cropped"] is False
+    assert item["cropped_bytes"] == data
+
+
+def test_build_item_barcode_crop_sets_crop_method_barcode(monkeypatch):
+    monkeypatch.setattr(
+        capture.decoding, "decode_barcodes",
+        lambda *a, **k: {"barcode_value": "809614206", "qr_values": [], "barcode_box": (50, 40, 120, 20)},
+    )
+    item = capture.build_item(_image_bytes(), "cam.jpg", "camera", 11)
+    assert item["crop_method"] == "barcode"
+    assert item["auto_cropped"] is True
+    assert item["crop_box"] is not None
