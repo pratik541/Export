@@ -85,3 +85,30 @@ def test_app_renders_metrics_row_with_items_present():
     assert not at.exception
     labels = [m.label for m in at.metric]
     assert "Total tags" in labels
+
+
+def test_delete_keeps_hash_so_widget_cannot_readd():
+    import hashlib
+    at = AppTest.from_file("app.py", default_timeout=120)
+    at.run()
+    it1, it2 = _fake_item(1), _fake_item(2)
+    # Give the two items distinct bytes so their md5 hashes differ.
+    img1 = np.full((40, 120, 3), 200, dtype=np.uint8)
+    img2 = np.full((40, 120, 3), 100, dtype=np.uint8)
+    ok1, buf1 = cv2.imencode(".png", img1)
+    ok2, buf2 = cv2.imencode(".png", img2)
+    assert ok1 and ok2
+    it1["original_bytes"] = it1["cropped_bytes"] = buf1.tobytes()
+    it2["original_bytes"] = it2["cropped_bytes"] = buf2.tobytes()
+    h1 = hashlib.md5(it1["original_bytes"]).hexdigest()
+    h2 = hashlib.md5(it2["original_bytes"]).hexdigest()
+    assert h1 != h2
+    at.session_state["gallery_items"] = [it1, it2]
+    at.session_state["seen_hashes"] = {h1, h2}
+    at.session_state["next_id"] = 3
+    at.run()
+    at.button(key="del_1").click().run()
+    assert not at.exception
+    remaining = [it["id"] for it in at.session_state["gallery_items"]]
+    assert remaining == [2]                     # item 1 removed
+    assert h1 in at.session_state["seen_hashes"]  # its hash kept -> can't reappear

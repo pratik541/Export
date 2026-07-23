@@ -50,6 +50,7 @@ st.session_state.setdefault("seen_hashes", set())
 st.session_state.setdefault("next_id", 1)
 st.session_state.setdefault("recrop_id", None)
 st.session_state.setdefault("confirm_clear", False)
+st.session_state.setdefault("widget_gen", 0)
 
 st.title(":material/diamond: IGI diamond report tag scanner")
 st.caption(
@@ -89,7 +90,6 @@ def _run_ocr(item):
 def _delete_item(item_id):
     item = _item_by_id(item_id)
     if item is not None:
-        st.session_state.seen_hashes.discard(hashlib.md5(item["original_bytes"]).hexdigest())
         st.session_state.gallery_items = [
             it for it in st.session_state.gallery_items if it["id"] != item_id
         ]
@@ -100,7 +100,7 @@ def _delete_item(item_id):
 def _item_status(item):
     r = item["ocr_result"]
     if r is None:
-        hint = "" if item["auto_cropped"] else " · auto-crop off, re-crop"
+        hint = "" if item.get("crop_method") else " · not cropped, re-crop"
         return "⏳ Not scanned" + hint
     if not r.get("accepted", False):
         return "❌ " + r.get("reason", "failed")
@@ -114,6 +114,7 @@ with st.container(border=True):
     with up_col:
         uploaded_files = st.file_uploader(
             "Upload tag photos", type=["jpg", "jpeg", "png"], accept_multiple_files=True,
+            key=f"uploader_{st.session_state.widget_gen}",
         )
         if uploaded_files:
             for uf in uploaded_files:
@@ -121,7 +122,10 @@ with st.container(border=True):
     with cam_col:
         st.markdown(_CAMERA_GUIDE_CSS, unsafe_allow_html=True)
         with st.container(key="camera_guide"):
-            shot = st.camera_input("Or take a photo", resolution="1080p")
+            shot = st.camera_input(
+                "Or take a photo", resolution="1080p",
+                key=f"camera_{st.session_state.widget_gen}",
+            )
         st.caption("Fill the box with the tag · hold flat and steady · ~15–30 cm · avoid glare")
         if shot is not None:
             _add_image(shot.getvalue(), f"camera_capture_{st.session_state.next_id}.jpg", "camera")
@@ -192,6 +196,7 @@ if items:
             st.session_state.seen_hashes = set()
             st.session_state.recrop_id = None
             st.session_state.confirm_clear = False
+            st.session_state.widget_gen += 1
             st.rerun()
         if no_col.button("Cancel clear"):
             st.session_state.confirm_clear = False
