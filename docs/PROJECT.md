@@ -50,21 +50,40 @@ not one continuous pipeline run the instant a photo arrives.
 photo bytes (upload or camera)
   -> decode to an image (reject if corrupt)
   -> barcode/QR decode (pyzbar), on the original image
-  -> usable barcode box found?
-       yes -> crop to the label region anchored on that box
-              (`imaging.crop_to_label` / `imaging.label_crop_box`)
-       no  -> fall back to the full, uncropped image
-              (no barcode detected, or pyzbar returned a degenerate
-              zero-width/zero-height box)
+  -> crop fallback order:
+       1. usable barcode box found -> crop to the label region anchored
+          on that box (`imaging.crop_to_label` / `imaging.label_crop_box`)
+          -> crop_method = "barcode"
+       2. no usable box, but source == "camera" -> crop to the guide-box
+          region instead (`imaging.center_box_crop`) — a centered
+          landscape rectangle matching the on-screen camera guide box, so
+          what the user framed in the box is what gets cropped
+          -> crop_method = "guide_box"
+       3. otherwise (e.g. an upload with no barcode) -> fall back to the
+          full, uncropped image -> crop_method = None
+     ("no usable box" means pyzbar found nothing, or returned a degenerate
+     zero-width/zero-height box.)
   -> gallery item: {id, source, filename, original_bytes, cropped_bytes,
-     crop_box, auto_cropped, ocr_result=None}
+     crop_box, crop_method, auto_cropped, ocr_result=None}
 ```
 
 The item is now sitting in the gallery, cropped but **not yet OCR'd**
-(`ocr_result` starts `None`). The user can leave the auto-crop as-is, or
-discard it and drag a manual box instead (`streamlit-cropper`, in `app.py`)
-— a manual re-crop clears `ocr_result` so a stale result from before the
-re-crop is never mistaken for current.
+(`ocr_result` starts `None`). `crop_method` records how the crop happened
+(`"barcode"`, `"guide_box"`, or `None`) and `auto_cropped` is just
+`crop_method is not None`; consumers currently only branch on `auto_cropped`
+and `ocr_result`, so `crop_method` is informational. The user can leave the
+auto-crop as-is, or discard it and drag a manual box instead
+(`streamlit-cropper`, in `app.py`) — a manual re-crop sets `crop_method` to
+`"manual"` and clears `ocr_result` so a stale result from before the re-crop
+is never mistaken for current.
+
+The on-screen guide box (camera preview only) is a CSS overlay in `app.py`
+sized to the same width/aspect/vertical-center fractions as
+`imaging.center_box_crop` (`imaging.GUIDE_BOX_WIDTH_FRAC`,
+`GUIDE_BOX_ASPECT`, `GUIDE_BOX_CENTER_Y_FRAC`) — the two are meant to agree
+so the crop matches what's visually framed, but the CSS can't import from
+`imaging.py`, so this is a manually-kept-in-sync convention, not an enforced
+one: if the constants change, the CSS must be updated to match by hand.
 
 ### 2. OCR, on demand (`pipeline.process_image`)
 
@@ -112,7 +131,7 @@ the export."
 | `capture.py` | `build_item(image_bytes, filename, source, item_id)` — turns raw capture bytes into a gallery item: decodes the barcode, auto-crops to the label when a usable box is found (else falls back to the full image), does **not** run OCR |
 | `pipeline.py` | `process_image(image_bytes, filename)` — orchestrates one (already-cropped) image through the OCR stage above |
 | `quality.py` | The pre-OCR quality gate (blur/exposure/text-presence checks) |
-| `imaging.py` | OpenCV preprocessing (grayscale, denoise, adaptive threshold) — used for barcode/QR decoding only; also `crop_to_label`/`label_crop_box`, the barcode-anchored auto-crop used by `capture.py` |
+| `imaging.py` | OpenCV preprocessing (grayscale, denoise, adaptive threshold) — used for barcode/QR decoding only; also `crop_to_label`/`label_crop_box` (the barcode-anchored auto-crop) and `center_box_crop` (the guide-box crop fallback for camera captures), both used by `capture.py` |
 | `decoding.py` | Barcode/QR decoding via `pyzbar` |
 | `ocr.py` | OCR via PaddleOCR, plus the row-reconstruction logic that turns its per-text-box detections into printed lines |
 | `parsing.py` | Regex/whitelist field extraction and validation |

@@ -20,15 +20,30 @@ works" below for the full flow.
 2. **Auto-crop** — each photo is decoded, its barcode located, and the image
    cropped to the label region anchored on that barcode position
    (`imaging.crop_to_label`, called from `capture.build_item`). If no usable
-   barcode box is found (undetected or a degenerate zero-size box), the item
-   falls back to the full, uncropped photo instead of failing.
+   barcode box is found (undetected or a degenerate zero-size box), a camera
+   capture falls back to cropping the on-screen guide-box region instead
+   (`imaging.center_box_crop`) — a centered rectangle matching what the
+   camera preview outlines on screen, so what the user framed in the box is
+   what gets cropped. The on-screen box is a CSS overlay (`app.py`) sized to
+   the same width/aspect/vertical-center fractions as `center_box_crop`, so
+   it's a visual aid the two are meant to agree with, not a pixel-exact
+   guarantee — it's approximate, and never blocks the shutter button. Uploads
+   have no such guide box to fall back to, so an upload with no usable
+   barcode keeps the full, uncropped photo instead of failing. Each item
+   records how it was cropped in a `crop_method` field (`"barcode"`,
+   `"guide_box"`, `"manual"`, or `None` for the uncropped fallback).
 3. **Gallery** — every captured photo appears as a thumbnail (the cropped
    version) with a status: not yet scanned, OK, needs review, or failed, plus
-   a note if auto-crop couldn't find a barcode.
+   a note if auto-crop couldn't find a barcode. A metrics row above the
+   gallery (Total tags / OK / Needs review / Not scanned) gives an at-a-glance
+   batch summary, and toasts confirm actions like adding a photo or finishing
+   OCR. Each thumbnail also has a per-item Delete button, and a "Clear all"
+   action (with a confirm step) empties the whole gallery.
 4. **Manual re-crop (optional)** — click "Re-crop" on any thumbnail to drag a
    box over the original photo yourself, using `streamlit-cropper`. This
-   replaces the auto-crop and clears any existing OCR result for that item,
-   so a stale result is never shown as current.
+   replaces the auto-crop (setting `crop_method` to `"manual"`) and clears any
+   existing OCR result for that item, so a stale result is never shown as
+   current.
 5. **OCR, on demand** — click "OCR" on an individual thumbnail, or "Run OCR
    on all" to process every item that hasn't been OCR'd yet. Only OCR'd,
    accepted items appear in the results table below the gallery.
