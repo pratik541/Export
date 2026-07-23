@@ -26,7 +26,7 @@ def _fake_item(item_id=1, ocr_result=None):
     return {
         "id": item_id, "source": "upload", "filename": f"tag{item_id}.png",
         "original_bytes": png, "cropped_bytes": png, "crop_box": None,
-        "auto_cropped": True, "ocr_result": ocr_result,
+        "crop_method": None, "auto_cropped": False, "ocr_result": ocr_result,
     }
 
 
@@ -73,3 +73,15 @@ def test_app_renders_results_table_for_an_ocrd_item():
     at.session_state["next_id"] = 2
     at.run()
     assert not at.exception
+
+
+def test_app_renders_metrics_row_with_items_present():
+    at = AppTest.from_file("app.py", default_timeout=120)
+    at.run()
+    at.session_state["gallery_items"] = [_fake_item(1), _fake_item(2)]
+    at.session_state["seen_hashes"] = {"seed"}
+    at.session_state["next_id"] = 3
+    at.run()
+    assert not at.exception
+    labels = [m.label for m in at.metric]
+    assert "Total tags" in labels

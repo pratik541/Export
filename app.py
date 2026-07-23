@@ -14,14 +14,13 @@ import excel_export
 import ocr
 import pipeline
 
-st.set_page_config(page_title="IGI Tag Scanner", layout="wide")
+st.set_page_config(page_title="IGI Tag Scanner", page_icon="💎", layout="wide")
 
-# Positioning-guide box drawn over the camera widget's live preview. Targets the
-# keyed container's stable `st-key-camera_guide` class (a documented Streamlit
-# class we set), not Streamlit's internal auto-generated classes. pointer-events
-# is none so the box never intercepts clicks on the "Take Photo" button. This is
-# a visual aid only — approximate alignment, and if a future Streamlit version
-# restructures the camera widget the box may misposition but cannot break the app.
+# Guide box drawn over the camera preview. Its relative numbers (width 78%,
+# vertical center 42%, 2:1 aspect) MUST match imaging.GUIDE_BOX_* so the visible
+# box matches capture.build_item's guide-box crop. Targets the keyed container's
+# stable `st-key-camera_guide` class; pointer-events:none so it never blocks the
+# shutter button. Visual aid only — approximate alignment, cannot break the app.
 _CAMERA_GUIDE_CSS = """
 <style>
 .st-key-camera_guide { position: relative; }
@@ -46,15 +45,16 @@ if "ocr_reader_ready" not in st.session_state:
         ocr.get_reader()
     st.session_state.ocr_reader_ready = True
 
-st.session_state.setdefault("gallery_items", [])          # list of item dicts (see capture.build_item)
-st.session_state.setdefault("seen_hashes", set())  # dedupe by original-bytes hash
+st.session_state.setdefault("gallery_items", [])
+st.session_state.setdefault("seen_hashes", set())
 st.session_state.setdefault("next_id", 1)
-st.session_state.setdefault("recrop_id", None)     # id of the item currently being manually re-cropped
+st.session_state.setdefault("recrop_id", None)
+st.session_state.setdefault("confirm_clear", False)
 
-st.title("IGI Diamond Report Tag Scanner")
+st.title(":material/diamond: IGI diamond report tag scanner")
 st.caption(
-    "Upload or capture tag photos. Each is auto-cropped to the label; re-crop "
-    "manually if needed, then run OCR per item or on the whole batch."
+    "Add tag photos, review the auto-crop, then run OCR per item or on the whole "
+    "batch. Rows flagged for review need a human check before export."
 )
 
 
@@ -71,27 +71,7 @@ def _add_image(data: bytes, filename: str, source: str):
     st.session_state.gallery_items.append(item)
     st.session_state.seen_hashes.add(digest)
     st.session_state.next_id += 1
-
-
-# --- Input: upload + camera, both feed the same gallery ---
-uploaded_files = st.file_uploader(
-    "Upload tag photos", type=["jpg", "jpeg", "png"], accept_multiple_files=True,
-)
-if uploaded_files:
-    for uf in uploaded_files:
-        _add_image(uf.getvalue(), uf.name, "upload")
-
-camera_col, _ = st.columns([1, 2])
-with camera_col:
-    st.markdown(_CAMERA_GUIDE_CSS, unsafe_allow_html=True)
-    with st.container(key="camera_guide"):
-        shot = st.camera_input("Or take a photo", resolution="1080p")
-    st.caption(
-        "Fill the box with the tag · hold it flat and steady · "
-        "~15–30 cm away · avoid glare on the label"
-    )
-if shot is not None:
-    _add_image(shot.getvalue(), f"camera_capture_{st.session_state.next_id}.jpg", "camera")
+    st.toast(f"Added {filename}", icon=":material/add_photo_alternate:")
 
 
 def _item_by_id(item_id):
@@ -106,83 +86,158 @@ def _run_ocr(item):
                               "reason": f"Processing error: {exc}"}
 
 
-# --- Manual re-crop overlay (shown when an item's "Re-crop" was clicked) ---
+def _delete_item(item_id):
+    item = _item_by_id(item_id)
+    if item is not None:
+        st.session_state.seen_hashes.discard(hashlib.md5(item["original_bytes"]).hexdigest())
+        st.session_state.gallery_items = [
+            it for it in st.session_state.gallery_items if it["id"] != item_id
+        ]
+        if st.session_state.recrop_id == item_id:
+            st.session_state.recrop_id = None
+
+
+def _item_status(item):
+    r = item["ocr_result"]
+    if r is None:
+        hint = "" if item["auto_cropped"] else " · auto-crop off, re-crop"
+        return "⏳ Not scanned" + hint
+    if not r.get("accepted", False):
+        return "❌ " + r.get("reason", "failed")
+    return "⚠️ Needs review" if r.get("needs_review") else "✅ OK"
+
+
+# --- Add tags section ---
+with st.container(border=True):
+    st.subheader(":material/add_a_photo: Add tags")
+    up_col, cam_col = st.columns(2)
+    with up_col:
+        uploaded_files = st.file_uploader(
+            "Upload tag photos", type=["jpg", "jpeg", "png"], accept_multiple_files=True,
+        )
+        if uploaded_files:
+            for uf in uploaded_files:
+                _add_image(uf.getvalue(), uf.name, "upload")
+    with cam_col:
+        st.markdown(_CAMERA_GUIDE_CSS, unsafe_allow_html=True)
+        with st.container(key="camera_guide"):
+            shot = st.camera_input("Or take a photo", resolution="1080p")
+        st.caption("Fill the box with the tag · hold flat and steady · ~15–30 cm · avoid glare")
+        if shot is not None:
+            _add_image(shot.getvalue(), f"camera_capture_{st.session_state.next_id}.jpg", "camera")
+
+
+# --- Manual re-crop overlay ---
 if st.session_state.recrop_id is not None:
     item = _item_by_id(st.session_state.recrop_id)
     if item is not None:
-        st.subheader(f"Re-crop: {item['filename']}")
-        pil_img = Image.open(io.BytesIO(item["original_bytes"]))
-        cropped_pil = st_cropper(pil_img, realtime_update=True, box_color="#00FF00",
-                                 aspect_ratio=None, key=f"cropper_{item['id']}")
-        col_ok, col_cancel = st.columns(2)
-        if col_ok.button("Use this crop", key=f"usecrop_{item['id']}"):
-            arr = cv2.cvtColor(np.array(cropped_pil.convert("RGB")), cv2.COLOR_RGB2BGR)
-            ok, buf = cv2.imencode(".jpg", arr)
-            if ok:
-                item["cropped_bytes"] = buf.tobytes()
-                item["auto_cropped"] = False
-                item["crop_box"] = None      # manual crop; box coords no longer tracked
-                item["ocr_result"] = None    # re-crop invalidates any prior OCR
+        with st.container(border=True):
+            st.subheader(f":material/crop: Re-crop: {item['filename']}")
+            pil_img = Image.open(io.BytesIO(item["original_bytes"]))
+            cropped_pil = st_cropper(pil_img, realtime_update=True, box_color="#00FF00",
+                                     aspect_ratio=None, key=f"cropper_{item['id']}")
+            ok_col, cancel_col = st.columns(2)
+            if ok_col.button("Use this crop", key=f"usecrop_{item['id']}", type="primary"):
+                arr = cv2.cvtColor(np.array(cropped_pil.convert("RGB")), cv2.COLOR_RGB2BGR)
+                ok, buf = cv2.imencode(".jpg", arr)
+                if ok:
+                    item["cropped_bytes"] = buf.tobytes()
+                    item["auto_cropped"] = False
+                    item["crop_box"] = None
+                    item["crop_method"] = "manual"
+                    item["ocr_result"] = None
+                    st.session_state.recrop_id = None
+                    st.rerun()
+                else:
+                    st.warning("Could not process the crop — please try again.")
+            if cancel_col.button("Cancel", key=f"cancelcrop_{item['id']}"):
                 st.session_state.recrop_id = None
                 st.rerun()
-            else:
-                st.warning("Could not process the crop — please try again.")
-        if col_cancel.button("Cancel", key=f"cancelcrop_{item['id']}"):
-            st.session_state.recrop_id = None
-            st.rerun()
 
-# --- Gallery ---
-if st.session_state.gallery_items:
-    st.subheader("Captured tags")
-    if st.button("Run OCR on all"):
-        pending = [it for it in st.session_state.gallery_items if it["ocr_result"] is None]
+
+# --- Metrics + batch actions ---
+items = st.session_state.gallery_items
+if items:
+    total = len(items)
+    scanned = [it["ocr_result"] for it in items if it["ocr_result"] is not None]
+    accepted = [r for r in scanned if r.get("accepted")]
+    ok = sum(1 for r in accepted if not r.get("needs_review"))
+    review = sum(1 for r in accepted if r.get("needs_review"))
+    not_scanned = total - len(scanned)
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total tags", total)
+    m2.metric("OK", ok)
+    m3.metric("Needs review", review)
+    m4.metric("Not scanned", not_scanned)
+
+    action_col, clear_col = st.columns([3, 1])
+    if action_col.button(":material/document_scanner: Run OCR on all", type="primary"):
+        pending = [it for it in items if it["ocr_result"] is None]
         progress = st.progress(0.0, text="Running OCR...")
         for i, it in enumerate(pending):
-            _run_ocr(it)
-            progress.progress((i + 1) / len(pending), text=f"OCR {i + 1}/{len(pending)}")
+            with st.spinner(f"Reading {it['filename']}..."):
+                _run_ocr(it)
+            progress.progress((i + 1) / max(len(pending), 1), text=f"OCR {i + 1}/{len(pending)}")
         progress.empty()
+        st.toast("OCR complete", icon=":material/check_circle:")
+    if clear_col.button(":material/delete_sweep: Clear all"):
+        st.session_state.confirm_clear = True
 
-    cols_per_row = 4
-    for row_start in range(0, len(st.session_state.gallery_items), cols_per_row):
-        row_items = st.session_state.gallery_items[row_start:row_start + cols_per_row]
-        cols = st.columns(cols_per_row)
-        for col, it in zip(cols, row_items):
-            with col:
-                st.image(it["cropped_bytes"], width="stretch")
-                if it["ocr_result"] is None:
-                    status = "⏳ not scanned" + ("" if it["auto_cropped"] else " · auto-crop failed, re-crop")
-                elif not it["ocr_result"].get("accepted", False):
-                    status = "❌ " + it["ocr_result"].get("reason", "failed")
-                elif it["ocr_result"].get("needs_review"):
-                    status = "⚠️ review"
-                else:
-                    status = "✅ OK"
-                st.caption(f"{it['filename']} — {status}")
-                if col.button("Re-crop", key=f"recrop_{it['id']}"):
-                    st.session_state.recrop_id = it["id"]
-                    st.rerun()
-                if col.button("OCR", key=f"ocr_{it['id']}"):
-                    _run_ocr(it)
-                    st.rerun()
+    if st.session_state.confirm_clear:
+        st.warning("Remove all captured tags?")
+        yes_col, no_col = st.columns(2)
+        if yes_col.button("Yes, clear all", type="primary"):
+            st.session_state.gallery_items = []
+            st.session_state.seen_hashes = set()
+            st.session_state.recrop_id = None
+            st.session_state.confirm_clear = False
+            st.rerun()
+        if no_col.button("Cancel clear"):
+            st.session_state.confirm_clear = False
+            st.rerun()
 
-# --- Results table + export (only OCR'd, accepted items) ---
-ocr_rows = [it["ocr_result"] for it in st.session_state.gallery_items
+    # --- Gallery ---
+    with st.container(border=True):
+        st.subheader(":material/photo_library: Captured tags")
+        cols_per_row = 4
+        for row_start in range(0, len(items), cols_per_row):
+            for col, it in zip(st.columns(cols_per_row), items[row_start:row_start + cols_per_row]):
+                with col:
+                    st.image(it["cropped_bytes"], width="stretch")
+                    st.caption(f"{it['filename']} — {_item_status(it)}")
+                    b1, b2, b3 = st.columns(3)
+                    if b1.button(":material/crop:", key=f"recrop_{it['id']}", help="Re-crop"):
+                        st.session_state.recrop_id = it["id"]
+                        st.rerun()
+                    if b2.button(":material/document_scanner:", key=f"ocr_{it['id']}", help="Run OCR"):
+                        with st.spinner("Reading..."):
+                            _run_ocr(it)
+                        st.toast(f"Scanned {it['filename']}", icon=":material/check_circle:")
+                        st.rerun()
+                    if b3.button(":material/delete:", key=f"del_{it['id']}", help="Delete"):
+                        _delete_item(it["id"])
+                        st.rerun()
+
+# --- Results table + export ---
+ocr_rows = [it["ocr_result"] for it in items
             if it["ocr_result"] is not None and it["ocr_result"].get("accepted")]
 if ocr_rows:
-    st.subheader("Results")
-    results_df = pd.DataFrame(ocr_rows).drop(columns=["accepted"], errors="ignore")
-    results_df.insert(
-        0, "review", results_df["needs_review"].map(lambda f: "⚠️ Review" if f else "✅ OK")
-    )
-    edited_df = st.data_editor(results_df, num_rows="dynamic", width="stretch")
+    with st.container(border=True):
+        st.subheader(":material/table_view: Results")
+        results_df = pd.DataFrame(ocr_rows).drop(columns=["accepted"], errors="ignore")
+        results_df.insert(
+            0, "review", results_df["needs_review"].map(lambda f: "⚠️ Review" if f else "✅ OK")
+        )
+        edited_df = st.data_editor(results_df, num_rows="dynamic", width="stretch")
 
-    excel_bytes = excel_export.build_excel_bytes(edited_df)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    st.download_button(
-        "Download results as Excel",
-        data=excel_bytes,
-        file_name=f"tag_scan_results_{timestamp}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-elif not st.session_state.gallery_items:
+        excel_bytes = excel_export.build_excel_bytes(edited_df)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        st.download_button(
+            ":material/download: Download results as Excel",
+            data=excel_bytes,
+            file_name=f"tag_scan_results_{timestamp}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+elif not items:
     st.info("Upload or capture tag photos to get started.")
