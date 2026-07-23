@@ -50,3 +50,32 @@ def crop_to_label(image, barcode_box):
     position. Returns a copy so the caller can freely encode/modify it."""
     left, top, right, bottom = label_crop_box(image, barcode_box)
     return image[top:bottom, left:right].copy()
+
+
+# Guide-box geometry. The on-screen camera guide box (CSS in app.py) AND this
+# fallback center crop use the SAME relative numbers, so what the user frames in
+# the box is what gets cropped. If you change these, change the guide-box CSS in
+# app.py to match (width %, vertical center %, 2:1 aspect).
+GUIDE_BOX_WIDTH_FRAC = 0.78       # box width as a fraction of image width
+GUIDE_BOX_ASPECT = 2.0            # width : height
+GUIDE_BOX_CENTER_Y_FRAC = 0.42    # box vertical center as a fraction of image height
+
+
+def center_box_crop(image):
+    """Crop to the guide-box region: a centered landscape rectangle matching the
+    on-screen camera guide box. Used as the crop fallback for camera captures
+    when no barcode is found. Clamped to image bounds; returns a copy."""
+    h, w = image.shape[:2]
+    box_w = GUIDE_BOX_WIDTH_FRAC * w
+    box_h = box_w / GUIDE_BOX_ASPECT
+    cx = w / 2.0
+    cy = GUIDE_BOX_CENTER_Y_FRAC * h
+    left = int(round(cx - box_w / 2))
+    right = int(round(cx + box_w / 2))
+    top = int(round(cy - box_h / 2))
+    bottom = int(round(cy + box_h / 2))
+    left = max(0, min(left, w - 1))
+    right = max(left + 1, min(right, w))
+    top = max(0, min(top, h - 1))
+    bottom = max(top + 1, min(bottom, h))
+    return image[top:bottom, left:right].copy()

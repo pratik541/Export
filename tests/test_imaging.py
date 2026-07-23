@@ -67,3 +67,28 @@ def test_crop_to_label_expands_right_and_down_more_than_left_and_up():
     # right/down padding larger than left/up padding
     assert (right - (bl + bw)) > (bl - left)
     assert (bottom - (bt + bh)) > (bt - top)
+
+
+def test_center_box_crop_returns_centered_landscape_region_smaller_than_frame():
+    image = np.zeros((1600, 1200, 3), dtype=np.uint8)
+    crop = imaging.center_box_crop(image)
+    ch, cw = crop.shape[:2]
+    assert 0 < cw < 1200 and 0 < ch < 1600
+    # ~78% width, 2:1 landscape
+    assert abs(cw - round(0.78 * 1200)) <= 2
+    assert cw > ch  # landscape
+    assert abs(cw / ch - 2.0) < 0.1
+
+
+def test_center_box_crop_clamps_to_bounds_on_small_image():
+    image = np.zeros((50, 60, 3), dtype=np.uint8)
+    crop = imaging.center_box_crop(image)
+    assert 0 < crop.shape[0] <= 50
+    assert 0 < crop.shape[1] <= 60
+
+
+def test_center_box_crop_returns_a_copy_not_a_view():
+    image = np.zeros((400, 400, 3), dtype=np.uint8)
+    crop = imaging.center_box_crop(image)
+    crop[0, 0] = 255
+    assert image[0, 0].tolist() == [0, 0, 0]  # original untouched
