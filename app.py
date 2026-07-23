@@ -40,6 +40,15 @@ _CAMERA_GUIDE_CSS = """
 </style>
 """
 
+_FIELD_LABELS = [
+    ("igi_report_no", "IGI no."),
+    ("report_type", "Report"),
+    ("shape", "Shape"),
+    ("carat", "Carat"),
+    ("color", "Color"),
+    ("clarity", "Clarity"),
+]
+
 if "ocr_reader_ready" not in st.session_state:
     with st.spinner("Loading OCR model (first run may take a few minutes to download)..."):
         ocr.get_reader()
@@ -50,29 +59,28 @@ st.session_state.setdefault("seen_hashes", set())
 st.session_state.setdefault("next_id", 1)
 st.session_state.setdefault("recrop_id", None)
 st.session_state.setdefault("confirm_clear", False)
-st.session_state.setdefault("widget_gen", 0)
+st.session_state.setdefault("uploader_gen", 0)   # bump to reset the file uploader
+st.session_state.setdefault("camera_gen", 0)     # bump to reset the camera (one-click repeat capture)
 
 st.title(":material/diamond: IGI diamond report tag scanner")
-st.caption(
-    "Add tag photos, review the auto-crop, then run OCR per item or on the whole "
-    "batch. Rows flagged for review need a human check before export."
-)
 
 
 def _add_image(data: bytes, filename: str, source: str):
+    """Add one image as a gallery item. Returns the new item, or None if it was
+    a duplicate / unreadable (so the caller can decide whether to auto-OCR)."""
     digest = hashlib.md5(data).hexdigest()
     if digest in st.session_state.seen_hashes:
-        return
+        return None
     try:
         item = capture.build_item(data, filename, source, st.session_state.next_id)
     except ValueError as exc:
         st.warning(f"{filename}: {exc}")
         st.session_state.seen_hashes.add(digest)
-        return
+        return None
     st.session_state.gallery_items.append(item)
     st.session_state.seen_hashes.add(digest)
     st.session_state.next_id += 1
-    st.toast(f"Added {filename}", icon=":material/add_photo_alternate:")
+    return item
 
 
 def _item_by_id(item_id):
@@ -88,13 +96,13 @@ def _run_ocr(item):
 
 
 def _delete_item(item_id):
-    item = _item_by_id(item_id)
-    if item is not None:
-        st.session_state.gallery_items = [
-            it for it in st.session_state.gallery_items if it["id"] != item_id
-        ]
-        if st.session_state.recrop_id == item_id:
-            st.session_state.recrop_id = None
+    # Keep the hash in seen_hashes so a still-populated uploader/camera widget
+    # can't re-add the item on the next rerun.
+    st.session_state.gallery_items = [
+        it for it in st.session_state.gallery_items if it["id"] != item_id
+    ]
+    if st.session_state.recrop_id == item_id:
+        st.session_state.recrop_id = None
 
 
 def _item_status(item):
@@ -107,28 +115,73 @@ def _item_status(item):
     return "⚠️ Needs review" if r.get("needs_review") else "✅ OK"
 
 
-# --- Add tags section ---
-with st.container(border=True):
-    st.subheader(":material/add_a_photo: Add tags")
-    up_col, cam_col = st.columns(2)
-    with up_col:
-        uploaded_files = st.file_uploader(
-            "Upload tag photos", type=["jpg", "jpeg", "png"], accept_multiple_files=True,
-            key=f"uploader_{st.session_state.widget_gen}",
+# --- Upload (top) ---
+uploaded_files = st.file_uploader(
+    "Upload tag photos", type=["jpg", "jpeg", "png"], accept_multiple_files=True,
+    key=f"uploader_{st.session_state.uploader_gen}",
+)
+if uploaded_files:
+    added_any = False
+    for uf in uploaded_files:
+        if _add_image(uf.getvalue(), uf.name, "upload") is not None:
+            added_any = True
+    if added_any:
+        st.toast("Photos added — use 'Run OCR on all' below", icon=":material/upload:")
+
+
+# --- Capture (camera left, latest result right) ---
+cam_col, latest_col = st.columns(2)
+
+with cam_col:
+    st.subheader(":material/photo_camera: Take a photo")
+    st.markdown(_CAMERA_GUIDE_CSS, unsafe_allow_html=True)
+    with st.container(key="camera_guide"):
+        shot = st.camera_input(
+            "Point at the tag and shoot", resolution="1080p",
+            key=f"camera_{st.session_state.camera_gen}", label_visibility="collapsed",
         )
-        if uploaded_files:
-            for uf in uploaded_files:
-                _add_image(uf.getvalue(), uf.name, "upload")
-    with cam_col:
-        st.markdown(_CAMERA_GUIDE_CSS, unsafe_allow_html=True)
-        with st.container(key="camera_guide"):
-            shot = st.camera_input(
-                "Or take a photo", resolution="1080p",
-                key=f"camera_{st.session_state.widget_gen}",
-            )
-        st.caption("Fill the box with the tag · hold flat and steady · ~15–30 cm · avoid glare")
-        if shot is not None:
-            _add_image(shot.getvalue(), f"camera_capture_{st.session_state.next_id}.jpg", "camera")
+    st.caption("Fill the box with the tag · hold flat and steady · ~15–30 cm · avoid glare")
+    if shot is not None:
+        item = _add_image(shot.getvalue(), f"camera_capture_{st.session_state.next_id}.jpg", "camera")
+        if item is not None:
+            with st.spinner("Reading tag..."):
+                _run_ocr(item)
+            st.session_state.camera_gen += 1  # reset camera to live preview for the next shot
+            st.toast(f"Scanned {item['filename']} — {_item_status(item)}", icon=":material/check_circle:")
+            st.rerun()
+
+with latest_col:
+    st.subheader(":material/center_focus_strong: Latest capture")
+    items = st.session_state.gallery_items
+    if not items:
+        st.info("Snap a tag — its reading shows here.")
+    else:
+        latest = items[-1]
+        img_col, data_col = st.columns([1, 1])
+        with img_col:
+            st.image(latest["cropped_bytes"], width="stretch")
+        with data_col:
+            st.markdown(f"**{_item_status(latest)}**")
+            r = latest["ocr_result"]
+            if r and r.get("accepted"):
+                st.dataframe(
+                    pd.DataFrame(
+                        [(lbl, r.get(key) or "—") for key, lbl in _FIELD_LABELS],
+                        columns=["Field", "Value"],
+                    ),
+                    hide_index=True, width="stretch",
+                )
+        rc1, rc2, rc3 = st.columns(3)
+        if rc1.button(":material/document_scanner: Rescan", key=f"latest_rescan_{latest['id']}"):
+            with st.spinner("Reading tag..."):
+                _run_ocr(latest)
+            st.rerun()
+        if rc2.button(":material/crop: Re-crop", key=f"latest_recrop_{latest['id']}"):
+            st.session_state.recrop_id = latest["id"]
+            st.rerun()
+        if rc3.button(":material/delete: Delete", key=f"latest_del_{latest['id']}"):
+            _delete_item(latest["id"])
+            st.rerun()
 
 
 # --- Manual re-crop overlay ---
@@ -149,7 +202,8 @@ if st.session_state.recrop_id is not None:
                     item["auto_cropped"] = False
                     item["crop_box"] = None
                     item["crop_method"] = "manual"
-                    item["ocr_result"] = None
+                    with st.spinner("Reading tag..."):
+                        _run_ocr(item)   # re-crop -> rescan so the shown result matches the new crop
                     st.session_state.recrop_id = None
                     st.rerun()
                 else:
@@ -159,7 +213,7 @@ if st.session_state.recrop_id is not None:
                 st.rerun()
 
 
-# --- Metrics + batch actions ---
+# --- Gallery + batch actions ---
 items = st.session_state.gallery_items
 if items:
     total = len(items)
@@ -180,11 +234,11 @@ if items:
         pending = [it for it in items if it["ocr_result"] is None]
         progress = st.progress(0.0, text="Running OCR...")
         for i, it in enumerate(pending):
-            with st.spinner(f"Reading {it['filename']}..."):
-                _run_ocr(it)
+            _run_ocr(it)
             progress.progress((i + 1) / max(len(pending), 1), text=f"OCR {i + 1}/{len(pending)}")
         progress.empty()
         st.toast("OCR complete", icon=":material/check_circle:")
+        st.rerun()
     if clear_col.button(":material/delete_sweep: Clear all"):
         st.session_state.confirm_clear = True
 
@@ -196,16 +250,16 @@ if items:
             st.session_state.seen_hashes = set()
             st.session_state.recrop_id = None
             st.session_state.confirm_clear = False
-            st.session_state.widget_gen += 1
+            st.session_state.uploader_gen += 1
+            st.session_state.camera_gen += 1
             st.rerun()
         if no_col.button("Cancel clear"):
             st.session_state.confirm_clear = False
             st.rerun()
 
-    # --- Gallery ---
     with st.container(border=True):
-        st.subheader(":material/photo_library: Captured tags")
-        cols_per_row = 4
+        st.subheader(":material/photo_library: All tags")
+        cols_per_row = 5
         for row_start in range(0, len(items), cols_per_row):
             for col, it in zip(st.columns(cols_per_row), items[row_start:row_start + cols_per_row]):
                 with col:
@@ -218,7 +272,6 @@ if items:
                     if b2.button(":material/document_scanner:", key=f"ocr_{it['id']}", help="Run OCR"):
                         with st.spinner("Reading..."):
                             _run_ocr(it)
-                        st.toast(f"Scanned {it['filename']}", icon=":material/check_circle:")
                         st.rerun()
                     if b3.button(":material/delete:", key=f"del_{it['id']}", help="Delete"):
                         _delete_item(it["id"])
