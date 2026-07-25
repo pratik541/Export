@@ -44,7 +44,7 @@ def _fake_item(item_id=1, ocr_result=None):
 
 
 def test_app_runs_clean_with_no_items():
-    at = AppTest.from_file("app.py", default_timeout=120)
+    at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
     at.run()
     assert not at.exception
 
@@ -52,7 +52,7 @@ def test_app_runs_clean_with_no_items():
 def test_app_renders_gallery_with_an_item_present():
     # Regression: this exercises the gallery-render loop that used to crash
     # with `TypeError: object of type 'method' has no len()`.
-    at = AppTest.from_file("app.py", default_timeout=120)
+    at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
     at.run()
     at.session_state["gallery_items"] = [_fake_item(1)]
     at.session_state["seen_hashes"] = {"seed"}
@@ -65,7 +65,7 @@ def test_app_emits_camera_positioning_guide_css():
     # The positioning-guide box is injected CSS targeting the keyed container's
     # `st-key-camera_guide` class. Assert it's actually emitted so the guide
     # can't silently vanish (visual alignment still needs manual browser check).
-    at = AppTest.from_file("app.py", default_timeout=120)
+    at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
     at.run()
     assert not at.exception
     all_markdown = " ".join(m.value for m in at.markdown)
@@ -79,7 +79,7 @@ def test_app_renders_results_table_for_an_ocrd_item():
         "igi_report_no": "809614206", "report_type": "CVD", "shape": "EMERALD",
         "carat": "3.01", "color": "E", "clarity": "VS1", "raw_ocr_text": "…",
     }
-    at = AppTest.from_file("app.py", default_timeout=120)
+    at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
     at.run()
     at.session_state["gallery_items"] = [_fake_item(1, ocr_result=ocr_result)]
     at.session_state["seen_hashes"] = {"seed"}
@@ -89,7 +89,7 @@ def test_app_renders_results_table_for_an_ocrd_item():
 
 
 def test_app_renders_metrics_row_with_items_present():
-    at = AppTest.from_file("app.py", default_timeout=120)
+    at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
     at.run()
     at.session_state["gallery_items"] = [_fake_item(1), _fake_item(2)]
     at.session_state["seen_hashes"] = {"seed"}
@@ -102,7 +102,7 @@ def test_app_renders_metrics_row_with_items_present():
 
 def test_delete_keeps_hash_so_widget_cannot_readd():
     import hashlib
-    at = AppTest.from_file("app.py", default_timeout=120)
+    at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
     at.run()
     it1, it2 = _fake_item(1), _fake_item(2)
     # Give the two items distinct bytes so their md5 hashes differ.
@@ -128,7 +128,7 @@ def test_delete_keeps_hash_so_widget_cannot_readd():
 
 
 def test_app_hides_saved_records_when_db_disabled():
-    at = AppTest.from_file("app.py", default_timeout=120)
+    at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
     at.run()
     assert not at.exception
     all_md = " ".join(m.value for m in at.markdown)
@@ -152,7 +152,7 @@ def test_saved_records_per_row_delete_calls_delete_one(monkeypatch):
     monkeypatch.setattr(db, "fetch_all", lambda: list(_SAVED_ROW))
     monkeypatch.setattr(db, "delete_all", lambda: True)
     monkeypatch.setattr(db, "delete_one", lambda igi: calls.append(igi) or True)
-    at = AppTest.from_file("app.py", default_timeout=120)
+    at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
     at.run()
     assert not at.exception
     all_sub = " ".join(el.value for el in at.get("subheader")) if at.get("subheader") else ""
@@ -168,7 +168,7 @@ def test_delete_all_only_fires_when_DELETE_typed(monkeypatch):
     monkeypatch.setattr(db, "fetch_all", lambda: list(_SAVED_ROW))
     monkeypatch.setattr(db, "delete_one", lambda igi: True)
     monkeypatch.setattr(db, "delete_all", lambda: (n.__setitem__("count", n["count"] + 1), True)[1])
-    at = AppTest.from_file("app.py", default_timeout=120)
+    at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
     at.run()
     at.button(key="delete_all_saved").click().run()                    # reveal confirm box
     at.text_input(key="delete_all_confirm_text").set_value("nope").run()
