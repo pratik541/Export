@@ -11,7 +11,20 @@ that state.
 """
 import cv2
 import numpy as np
+import pytest
 from streamlit.testing.v1 import AppTest
+
+import db
+
+
+@pytest.fixture(autouse=True)
+def _disable_db(monkeypatch):
+    """Force the Supabase store OFF for every app test, so results are
+    deterministic and hermetic regardless of whether a local
+    .streamlit/secrets.toml happens to exist — and so tests never make a real
+    network call to a configured database. `get_client() -> None` disables
+    is_enabled/save_scan/fetch_all together."""
+    monkeypatch.setattr(db, "get_client", lambda: None)
 
 
 def _png_bytes():
