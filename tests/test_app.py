@@ -136,3 +136,20 @@ def test_app_hides_saved_records_when_db_disabled():
         el.value for el in at.get("subheader")
     ) if at.get("subheader") else ""
     assert "Saved records" not in all_md and "Saved records" not in all_subheaders
+
+
+def test_saved_records_and_delete_ui_render_with_mocked_db(monkeypatch):
+    import db
+    monkeypatch.setattr(db, "is_enabled", lambda: True)
+    monkeypatch.setattr(db, "fetch_all", lambda: [
+        {"igi_report_no": "809614206", "report_type": "CVD", "shape": "EMERALD",
+         "carat": "3.01", "color": "E", "clarity": "VS1", "needs_review": False,
+         "source": "camera", "scanned_at": "2026-07-25T00:00:00+00:00"},
+    ])
+    monkeypatch.setattr(db, "delete_all", lambda: True)
+    monkeypatch.setattr(db, "delete_one", lambda igi: True)
+    at = AppTest.from_file("app.py", default_timeout=120)
+    at.run()
+    assert not at.exception
+    all_sub = " ".join(el.value for el in at.get("subheader")) if at.get("subheader") else ""
+    assert "Saved records" in all_sub

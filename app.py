@@ -60,6 +60,7 @@ st.session_state.setdefault("seen_hashes", set())
 st.session_state.setdefault("next_id", 1)
 st.session_state.setdefault("recrop_id", None)
 st.session_state.setdefault("confirm_clear", False)
+st.session_state.setdefault("confirm_delete_all", False)
 st.session_state.setdefault("uploader_gen", 0)   # bump to reset the file uploader
 st.session_state.setdefault("camera_gen", 0)     # bump to reset the camera (one-click repeat capture)
 
@@ -261,13 +262,13 @@ if items:
         progress.empty()
         st.toast("OCR complete", icon=":material/check_circle:")
         st.rerun()
-    if clear_col.button(":material/delete_sweep: Clear all"):
+    if clear_col.button(":material/restart_alt: Restart / new batch"):
         st.session_state.confirm_clear = True
 
     if st.session_state.confirm_clear:
-        st.warning("Remove all captured tags?")
+        st.warning("Start a new batch? This clears the captured tags on THIS device (saved database records are not affected).")
         yes_col, no_col = st.columns(2)
-        if yes_col.button("Yes, clear all", type="primary"):
+        if yes_col.button("Yes, restart", type="primary"):
             st.session_state.gallery_items = []
             st.session_state.seen_hashes = set()
             st.session_state.recrop_id = None
@@ -336,12 +337,44 @@ if db.is_enabled():
         else:
             saved_df = pd.DataFrame(rows)
             st.dataframe(saved_df, hide_index=True, width="stretch")
+
             excel_bytes = excel_export.build_excel_bytes(saved_df)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            st.download_button(
+            dl_col, delall_col = st.columns([3, 1])
+            dl_col.download_button(
                 ":material/download: Download all saved records as Excel",
                 data=excel_bytes,
                 file_name=f"tag_scans_all_{timestamp}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="download_all_saved",
             )
+            if delall_col.button(":material/delete_forever: Delete all", key="delete_all_saved"):
+                st.session_state.confirm_delete_all = True
+
+            if st.session_state.confirm_delete_all:
+                st.error("This permanently deletes ALL saved records for everyone. Type DELETE to confirm.")
+                typed = st.text_input("Type DELETE", key="delete_all_confirm_text", label_visibility="collapsed")
+                c1, c2 = st.columns(2)
+                if c1.button("Confirm delete all", type="primary", key="confirm_delete_all_btn"):
+                    if typed == "DELETE":
+                        db.delete_all()
+                        st.session_state.confirm_delete_all = False
+                        if db.fetch_all():  # rows still there -> the delete had no effect
+                            st.warning("Delete had no effect — add the delete policy in Supabase (see README).")
+                        else:
+                            st.toast("All saved records deleted", icon=":material/delete_forever:")
+                            st.rerun()
+                    else:
+                        st.warning("Type DELETE exactly to confirm.")
+                if c2.button("Cancel", key="cancel_delete_all"):
+                    st.session_state.confirm_delete_all = False
+                    st.rerun()
+
+            st.caption("Delete a single record:")
+            for row in rows:
+                igi = row.get("igi_report_no", "")
+                rcol, bcol = st.columns([4, 1])
+                rcol.write(f"{igi} · {row.get('shape') or '—'} · {row.get('carat') or '—'} ct")
+                if bcol.button(":material/delete:", key=f"del_saved_{igi}", help="Delete this record"):
+                    db.delete_one(igi)
+                    st.rerun()
