@@ -194,7 +194,17 @@ alter table tag_scans enable row level security;
 create policy "anon read"  on tag_scans for select using (true);
 create policy "anon write" on tag_scans for insert with check (true);
 create policy "anon update" on tag_scans for update using (true) with check (true);
+create policy "anon delete" on tag_scans for delete using (true);
 ```
+
+**The delete policy is required, not optional**, if you want deletes to work:
+without it, Supabase's row-level security silently blocks the delete — the
+API call itself doesn't error, so the app has no way to tell "deleted" apart
+from "no rows matched" from a normal response alone. For per-row deletes this
+can pass unnoticed; for "Delete all" the app double-checks by re-fetching the
+table afterward, and shows a warning ("Delete had no effect...") if any rows
+are still there, since that's the strongest signal that the delete policy is
+missing.
 
 ### 2. Configure secrets
 
@@ -215,6 +225,20 @@ create policy "anon update" on tag_scans for update using (true) with check (tru
   no key to upsert on).
 - The "Saved records" section reads the shared table directly (not just this
   session's captures) and offers an export-all-to-Excel button.
+- Each saved record can be deleted individually, and the whole table can be
+  cleared with a type-to-confirm "Delete all" (you must type `DELETE` before
+  it runs). Both are **permanent, shared deletes** — they remove data from
+  the Supabase table for every device reading it, not just the current
+  session, and there is no undo.
+- The delete RLS policy above is required for either delete to actually take
+  effect — without it, the request succeeds at the API level but removes
+  nothing. The app can't detect this for a single-row delete, but "Delete
+  all" re-checks afterward and warns ("Delete had no effect...") if rows
+  remain, which is the signal to add the delete policy in Supabase.
+- The local **"Restart / new batch"** button (in the gallery section) only
+  clears this device's in-progress capture batch from the browser session —
+  it never touches the shared Supabase table. Use per-row/"Delete all" in
+  "Saved records" to actually remove data from the database.
 - If Supabase isn't configured (no secrets present), the database features
   are simply hidden and the app behaves exactly as it did before this
   feature existed.

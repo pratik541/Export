@@ -136,7 +136,7 @@ the export."
 | `ocr.py` | OCR via PaddleOCR, plus the row-reconstruction logic that turns its per-text-box detections into printed lines |
 | `parsing.py` | Regex/whitelist field extraction and validation |
 | `excel_export.py` | Builds the downloadable `.xlsx` from the results table |
-| `db.py` | Optional Supabase central store: upsert-save accepted scans, fetch shared records; no-ops when unconfigured |
+| `db.py` | Optional Supabase central store: upsert-save accepted scans, fetch shared records, `delete_one`/`delete_all` to remove saved records; no-ops when unconfigured |
 
 ## OCR engine
 
@@ -194,11 +194,30 @@ number are never sent there. Credentials live only in `st.secrets`
 Cloud) — `db.py` never hardcodes or otherwise stores them.
 
 The graceful-degradation contract is central to how this module is used
-elsewhere: `db.is_enabled()`, `db.save_scan()`, and `db.fetch_all()` never
-raise and never block the main flow — if Supabase isn't configured (no
-`[supabase]` secrets) or a call fails for any reason, they simply return
-`False`/`[]` and the app continues exactly as it does with no database at
-all. See `README.md` for the table SQL and secrets setup.
+elsewhere: `db.is_enabled()`, `db.save_scan()`, `db.fetch_all()`,
+`db.delete_one()`, and `db.delete_all()` never raise and never block the main
+flow — if Supabase isn't configured (no `[supabase]` secrets) or a call fails
+for any reason, they simply return `False`/`[]` and the app continues exactly
+as it does with no database at all. See `README.md` for the table SQL and
+secrets setup.
+
+`db.delete_one(igi_report_no)` and `db.delete_all()` remove rows from the
+shared table permanently, for every device reading it — not a local/session
+action. `delete_all()` matches every row via a never-true exclusion filter on
+the primary key (`neq igi_report_no "__none__"`), since PostgREST requires a
+filter on delete. Both functions only report whether the API call itself
+completed without error, which is a distinct question from whether a row was
+actually removed: Supabase's row-level security silently blocks deletes if
+the table lacks a `for delete` policy, and a blocked delete still returns a
+normal (non-error) response. That's why the `tag_scans` table needs an
+explicit delete policy (see `README.md`) — without it, `delete_one`/
+`delete_all` return `True` but nothing is actually removed. The app can't
+detect this for a single-row delete, but for "Delete all" it re-runs
+`fetch_all()` immediately after and warns the user if rows are still present,
+which is the practical signal that the delete policy is missing. The app's
+local "Restart / new batch" control (`app.py`) is unrelated to any of this —
+it only clears the current session's in-progress gallery state and never
+calls into `db.py`.
 
 ## Known limitations
 
