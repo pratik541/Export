@@ -230,8 +230,10 @@ create policy "anon update" on tag_scans for update using (true) with check (tru
   frequently unreadable in practice, and the IGI report number is already
   covered by the barcode (or, if that fails, the printed "IGI CERT - ######"
   text), so the app doesn't track them.
-- No database, login, or cross-device/cross-session persistence: capture and
-  review/export must happen in one sitting in one browser session.
+- No login/auth. Persistence is optional: without Supabase configured, capture
+  and review/export happen in one sitting in one browser session; with the
+  optional Supabase store enabled (see "Central database"), accepted scans are
+  saved centrally and shared across devices.
 - Live phone-to-*separate*-desktop camera streaming is not supported — a phone
   can only participate as a camera device for the same session (see "Using a
   phone as the camera" above), not as a remote feed into someone else's session.

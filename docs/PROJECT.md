@@ -212,8 +212,10 @@ all. See `README.md` for the table SQL and secrets setup.
   also truncated/garbled — no software fix recovers a value that was never
   captured in the OCR output. `needs_review` exists specifically to catch
   these cases rather than silently exporting an incomplete row.
-- No database, login, or cross-device/cross-session persistence — capture and
-  review/export happen in one sitting, in one browser session.
+- No login/auth. Persistence is optional: by default capture and review/export
+  happen in one sitting in one browser session; with the optional Supabase
+  store configured (see "Central store"), accepted scans persist centrally and
+  are shared across devices.
 - No live phone-to-*separate*-desktop camera streaming. A phone can act as
   this session's camera (e.g. via Windows 11 Phone Link, see `README.md`),
   but not as a remote feed into someone else's session.
