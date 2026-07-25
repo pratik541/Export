@@ -127,7 +127,10 @@ the export."
 
 | File | Responsibility |
 |---|---|
-| `app.py` | Streamlit UI: file upload + camera input feeding a gallery, manual re-crop overlay (`streamlit-cropper`), per-item/"OCR all" triggers, results table, Excel download |
+| `app.py` | `st.navigation` entry point: sets `st.set_page_config`, runs the one-time OCR model warmup, calls `ui_common.init_state()`, and registers the two pages (`page_manage.render` at `url_path="manage"`, default; `page_scan.render` at `url_path="scan"`) |
+| `ui_common.py` | Shared, page-agnostic helpers and session-state used by both pages: `add_image`, `run_ocr`, `autosave`, `delete_item`, `item_status`, `FIELD_LABELS`, the camera guide-box CSS |
+| `page_manage.py` | The **Manage** page (`render()`): the full desktop workflow — file upload + camera input feeding a gallery, manual re-crop overlay (`streamlit-cropper`), per-item/"OCR all" triggers, results table, Excel download, saved-records view/delete |
+| `page_scan.py` | The **Scan** page (`render()`): mobile rear one-tap camera (`streamlit-back-camera-input`, falling back to `st.camera_input`) → auto-OCR → auto-save → a compact no-scroll result card with an inline "Fix this reading" expander |
 | `capture.py` | `build_item(image_bytes, filename, source, item_id)` — turns raw capture bytes into a gallery item: decodes the barcode, auto-crops to the label when a usable box is found (else falls back to the full image), does **not** run OCR |
 | `pipeline.py` | `process_image(image_bytes, filename)` — orchestrates one (already-cropped) image through the OCR stage above |
 | `quality.py` | The pre-OCR quality gate (blur/exposure/text-presence checks) |
@@ -137,6 +140,52 @@ the export."
 | `parsing.py` | Regex/whitelist field extraction and validation |
 | `excel_export.py` | Builds the downloadable `.xlsx` from the results table |
 | `db.py` | Optional Supabase central store: upsert-save accepted scans, fetch shared records, `delete_one`/`delete_all` to remove saved records; no-ops when unconfigured |
+
+## Two-page structure (Manage / Scan)
+
+The app is `st.navigation`-based, with two pages:
+
+- **Manage** (`page_manage.py`, default page) — the full desktop workflow
+  described throughout this document: upload/camera capture into a gallery,
+  manual re-crop, per-item/batch OCR, the results table, Excel export, and
+  the optional Supabase saved-records view.
+- **Scan** (`page_scan.py`) — a mobile-first page: a single tap on the
+  rear-camera preview captures a tag, which is immediately auto-cropped,
+  OCR'd, and (if Supabase is configured) auto-saved, with no separate
+  "Run OCR" step. The result renders as a compact card sized to fit a phone
+  screen without scrolling, and — if a field is missing or flagged for
+  review — an inline "Fix this reading" expander lets that field be
+  corrected and saved on the spot. A "Use basic camera" toggle swaps in the
+  standard `st.camera_input()` widget if the rear-camera component isn't
+  available.
+
+Wiring: `app.py` is the `st.navigation` entry point — it owns
+`st.set_page_config` and the one-time OCR warmup (each must run exactly
+once, before any page renders, not once per page), then calls
+`ui_common.init_state()` and registers `st.Page(page_manage.render, ...,
+url_path="manage", default=True)` and `st.Page(page_scan.render, ...,
+url_path="scan")`. Both page modules expose their entry point as a function
+named `render()`, so each `st.Page(...)` call passes an explicit
+`url_path=` — `st.navigation` would otherwise have no way to distinguish
+the two identically-named `render` callables. `ui_common.py` holds the
+helpers and session-state both pages share (`add_image`, `run_ocr`,
+`autosave`, `item_status`, `FIELD_LABELS`, the camera guide-box CSS), so
+Manage and Scan behave identically for the parts of the pipeline they have
+in common (auto-crop, OCR, autosave, status labels). Nothing about the OCR,
+parsing, cropping, decoding, Excel, or Supabase-schema logic described
+elsewhere in this document changed to support the split.
+
+**New dependency**: `streamlit-back-camera-input==0.1.1`, pinned in
+`requirements.txt`. It's pure Python — no `packages.txt` change was
+needed — and requests the browser's rear-facing camera directly
+(`facingMode: environment`), rather than needing a webcam or a Phone Link
+pairing (see `README.md`).
+
+**Not in this release**: automatically capturing the instant a tag is
+framed ("auto-click") is planned as a v2 enhancement — Android-first, using
+the browser's `BarcodeDetector` API, falling back to today's one-tap
+capture for devices/browsers without it. This release always requires the
+explicit tap on Scan.
 
 ## OCR engine
 
