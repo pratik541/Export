@@ -19,7 +19,8 @@ _COLUMNS = ("igi_report_no", "report_type", "shape", "carat", "color", "clarity"
 @st.cache_resource
 def get_client():
     """Build a Supabase client from st.secrets, or return None if unconfigured
-    or unbuildable. Cached so the client is created once per session."""
+    or unbuildable. Cached with st.cache_resource, so one client is built and
+    shared (across sessions) rather than reconstructed per rerun."""
     if create_client is None:
         return None
     try:

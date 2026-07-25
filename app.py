@@ -62,7 +62,6 @@ st.session_state.setdefault("recrop_id", None)
 st.session_state.setdefault("confirm_clear", False)
 st.session_state.setdefault("uploader_gen", 0)   # bump to reset the file uploader
 st.session_state.setdefault("camera_gen", 0)     # bump to reset the camera (one-click repeat capture)
-st.session_state.setdefault("last_save_ok", None)
 
 st.title(":material/diamond: IGI diamond report tag scanner")
 
@@ -99,12 +98,13 @@ def _run_ocr(item):
 
 def _autosave(item):
     """Auto-save an accepted, IGI-bearing scan to Supabase if configured.
-    Records a short status string for the latest-capture indicator."""
+    Records the save outcome ON THE ITEM (item["saved_ok"]: True/False, or absent
+    if saving didn't apply) so the indicator reflects that item, not a stale
+    session-global flag."""
     r = item.get("ocr_result")
     if not (db.is_enabled() and r and r.get("accepted") and r.get("igi_report_no")):
         return
-    ok = db.save_scan(r, item["source"])
-    st.session_state["last_save_ok"] = ok
+    item["saved_ok"] = db.save_scan(r, item["source"])
 
 
 def _delete_item(item_id):
@@ -185,7 +185,7 @@ with latest_col:
                     hide_index=True, width="stretch",
                 )
             if db.is_enabled():
-                saved = st.session_state.get("last_save_ok")
+                saved = latest.get("saved_ok")
                 if saved is True:
                     st.caption("☁ saved to database")
                 elif saved is False:
