@@ -160,6 +160,65 @@ can select. No app configuration is needed for this.
    or reverting to the lighter (but less accurate) Tesseract-based approach
    from an earlier point in this project's history.
 
+## Central database (optional)
+
+By default this app has no database: everything lives in the browser session,
+as described above. You can optionally connect it to a shared
+[Supabase](https://supabase.com) table so that every accepted scan (one with
+a readable IGI report number) is automatically saved centrally, and a "Saved
+records" section in the app can read that shared table back and export all of
+it to Excel. **This is entirely optional** — without it configured, the app
+runs exactly as before, with no database section shown and no behavior
+change.
+
+### 1. Create the table
+
+In your Supabase project's SQL editor, run:
+
+```sql
+create table if not exists tag_scans (
+    igi_report_no text primary key,
+    report_type text,
+    shape text,
+    carat text,
+    color text,
+    clarity text,
+    needs_review boolean,
+    source text,
+    scanned_at timestamptz not null default now()
+);
+
+alter table tag_scans enable row level security;
+
+-- Internal tool with a shared table: allow the anon role to read and write.
+create policy "anon read"  on tag_scans for select using (true);
+create policy "anon write" on tag_scans for insert with check (true);
+create policy "anon update" on tag_scans for update using (true) with check (true);
+```
+
+### 2. Configure secrets
+
+- **Local setup**: copy `.streamlit/secrets.toml.example` to
+  `.streamlit/secrets.toml` and fill in your project's URL and anon key
+  (Supabase dashboard → Project Settings → API). `.streamlit/secrets.toml` is
+  gitignored — never commit real credentials.
+- **Streamlit Cloud**: paste the same `[supabase]` block into the app's
+  Settings → Secrets.
+
+### Behavior notes
+
+- Each accepted scan auto-upserts into `tag_scans` keyed on
+  `igi_report_no` — one row per stone, so re-scanning the same tag updates
+  its existing row instead of duplicating it.
+- Rows without a readable IGI report number are kept local-only in that
+  session's results table; they are never saved to the shared table (there's
+  no key to upsert on).
+- The "Saved records" section reads the shared table directly (not just this
+  session's captures) and offers an export-all-to-Excel button.
+- If Supabase isn't configured (no secrets present), the database features
+  are simply hidden and the app behaves exactly as it did before this
+  feature existed.
+
 ## Known limitations
 
 - OCR accuracy depends on photo lighting, focus, and tag condition. Always review

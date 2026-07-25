@@ -136,6 +136,7 @@ the export."
 | `ocr.py` | OCR via PaddleOCR, plus the row-reconstruction logic that turns its per-text-box detections into printed lines |
 | `parsing.py` | Regex/whitelist field extraction and validation |
 | `excel_export.py` | Builds the downloadable `.xlsx` from the results table |
+| `db.py` | Optional Supabase central store: upsert-save accepted scans, fetch shared records; no-ops when unconfigured |
 
 ## OCR engine
 
@@ -180,6 +181,24 @@ confidence), not one continuous text block the way Tesseract does. `ocr.py`
 reconstructs printed lines by grouping fragments whose vertical centers are
 close together, sorted left-to-right — this is what lets the same line-based
 `parsing.py` logic work regardless of engine.
+
+## Central store (optional)
+
+`db.py` wraps an optional Supabase table (`tag_scans`) that, when configured,
+gives the app a shared, cross-session store on top of the per-session flow
+described above. Every accepted scan with a readable `igi_report_no`
+auto-upserts into that table keyed on `igi_report_no` (one row per stone, so
+re-scanning updates rather than duplicates); scans without a readable IGI
+number are never sent there. Credentials live only in `st.secrets`
+(`.streamlit/secrets.toml` locally, the app's Secrets settings on Streamlit
+Cloud) — `db.py` never hardcodes or otherwise stores them.
+
+The graceful-degradation contract is central to how this module is used
+elsewhere: `db.is_enabled()`, `db.save_scan()`, and `db.fetch_all()` never
+raise and never block the main flow — if Supabase isn't configured (no
+`[supabase]` secrets) or a call fails for any reason, they simply return
+`False`/`[]` and the app continues exactly as it does with no database at
+all. See `README.md` for the table SQL and secrets setup.
 
 ## Known limitations
 
