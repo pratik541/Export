@@ -10,6 +10,7 @@ from PIL import Image
 from streamlit_cropper import st_cropper
 
 import capture
+import db
 import excel_export
 import ocr
 import pipeline
@@ -61,6 +62,7 @@ st.session_state.setdefault("recrop_id", None)
 st.session_state.setdefault("confirm_clear", False)
 st.session_state.setdefault("uploader_gen", 0)   # bump to reset the file uploader
 st.session_state.setdefault("camera_gen", 0)     # bump to reset the camera (one-click repeat capture)
+st.session_state.setdefault("last_save_ok", None)
 
 st.title(":material/diamond: IGI diamond report tag scanner")
 
@@ -93,6 +95,16 @@ def _run_ocr(item):
     except Exception as exc:  # noqa: BLE001 - one bad image must not kill the batch
         item["ocr_result"] = {"filename": item["filename"], "accepted": False,
                               "reason": f"Processing error: {exc}"}
+
+
+def _autosave(item):
+    """Auto-save an accepted, IGI-bearing scan to Supabase if configured.
+    Records a short status string for the latest-capture indicator."""
+    r = item.get("ocr_result")
+    if not (db.is_enabled() and r and r.get("accepted") and r.get("igi_report_no")):
+        return
+    ok = db.save_scan(r, item["source"])
+    st.session_state["last_save_ok"] = ok
 
 
 def _delete_item(item_id):
@@ -146,6 +158,7 @@ with cam_col:
         if item is not None:
             with st.spinner("Reading tag..."):
                 _run_ocr(item)
+            _autosave(item)
             st.session_state.camera_gen += 1  # reset camera to live preview for the next shot
             st.toast(f"Scanned {item['filename']} — {_item_status(item)}", icon=":material/check_circle:")
             st.rerun()
@@ -171,10 +184,17 @@ with latest_col:
                     ),
                     hide_index=True, width="stretch",
                 )
+            if db.is_enabled():
+                saved = st.session_state.get("last_save_ok")
+                if saved is True:
+                    st.caption("☁ saved to database")
+                elif saved is False:
+                    st.caption("⚠ save failed — kept locally")
         rc1, rc2, rc3 = st.columns(3)
         if rc1.button(":material/document_scanner: Rescan", key=f"latest_rescan_{latest['id']}"):
             with st.spinner("Reading tag..."):
                 _run_ocr(latest)
+            _autosave(latest)
             st.rerun()
         if rc2.button(":material/crop: Re-crop", key=f"latest_recrop_{latest['id']}"):
             st.session_state.recrop_id = latest["id"]
@@ -204,6 +224,7 @@ if st.session_state.recrop_id is not None:
                     item["crop_method"] = "manual"
                     with st.spinner("Reading tag..."):
                         _run_ocr(item)   # re-crop -> rescan so the shown result matches the new crop
+                    _autosave(item)
                     st.session_state.recrop_id = None
                     st.rerun()
                 else:
@@ -235,6 +256,7 @@ if items:
         progress = st.progress(0.0, text="Running OCR...")
         for i, it in enumerate(pending):
             _run_ocr(it)
+            _autosave(it)
             progress.progress((i + 1) / max(len(pending), 1), text=f"OCR {i + 1}/{len(pending)}")
         progress.empty()
         st.toast("OCR complete", icon=":material/check_circle:")
@@ -272,6 +294,7 @@ if items:
                     if b2.button(":material/document_scanner:", key=f"ocr_{it['id']}", help="Run OCR"):
                         with st.spinner("Reading..."):
                             _run_ocr(it)
+                        _autosave(it)
                         st.rerun()
                     if b3.button(":material/delete:", key=f"del_{it['id']}", help="Delete"):
                         _delete_item(it["id"])
@@ -299,3 +322,26 @@ if ocr_rows:
         )
 elif not items:
     st.info("Upload or capture tag photos to get started.")
+
+# --- Saved records (shared Supabase store) ---
+if db.is_enabled():
+    with st.container(border=True):
+        header_col, refresh_col = st.columns([3, 1])
+        header_col.subheader(":material/cloud: Saved records (shared)")
+        if refresh_col.button(":material/refresh: Refresh"):
+            st.rerun()
+        rows = db.fetch_all()
+        if not rows:
+            st.caption("No saved records yet (or couldn't reach the database).")
+        else:
+            saved_df = pd.DataFrame(rows)
+            st.dataframe(saved_df, hide_index=True, width="stretch")
+            excel_bytes = excel_export.build_excel_bytes(saved_df)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            st.download_button(
+                ":material/download: Download all saved records as Excel",
+                data=excel_bytes,
+                file_name=f"tag_scans_all_{timestamp}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_all_saved",
+            )

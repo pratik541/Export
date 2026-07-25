@@ -112,3 +112,14 @@ def test_delete_keeps_hash_so_widget_cannot_readd():
     remaining = [it["id"] for it in at.session_state["gallery_items"]]
     assert remaining == [2]                     # item 1 removed
     assert h1 in at.session_state["seen_hashes"]  # its hash kept -> can't reappear
+
+
+def test_app_hides_saved_records_when_db_disabled():
+    at = AppTest.from_file("app.py", default_timeout=120)
+    at.run()
+    assert not at.exception
+    all_md = " ".join(m.value for m in at.markdown)
+    all_subheaders = " ".join(
+        el.value for el in at.get("subheader")
+    ) if at.get("subheader") else ""
+    assert "Saved records" not in all_md and "Saved records" not in all_subheaders
