@@ -68,3 +68,32 @@ def fetch_all() -> list:
         return result.data or []
     except Exception:
         return []
+
+
+def delete_one(igi_report_no: str) -> bool:
+    """Delete the saved row with this IGI number. Returns True if the call ran
+    without error; False if disabled or on any client error. (Whether a row was
+    actually removed also depends on the delete RLS policy — the app verifies
+    effect by re-reading.)"""
+    client = get_client()
+    if client is None:
+        return False
+    try:
+        client.table(TABLE).delete().eq("igi_report_no", igi_report_no).execute()
+        return True
+    except Exception:
+        return False
+
+
+def delete_all() -> bool:
+    """Delete every saved row. PostgREST requires a filter on delete, so match
+    all rows via a never-true-exclusion on the primary key. Returns True if the
+    call ran without error; False if disabled or on error."""
+    client = get_client()
+    if client is None:
+        return False
+    try:
+        client.table(TABLE).delete().neq("igi_report_no", "__none__").execute()
+        return True
+    except Exception:
+        return False
