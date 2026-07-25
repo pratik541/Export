@@ -138,18 +138,43 @@ def test_app_hides_saved_records_when_db_disabled():
     assert "Saved records" not in all_md and "Saved records" not in all_subheaders
 
 
-def test_saved_records_and_delete_ui_render_with_mocked_db(monkeypatch):
+_SAVED_ROW = [
+    {"igi_report_no": "809614206", "report_type": "CVD", "shape": "EMERALD",
+     "carat": "3.01", "color": "E", "clarity": "VS1", "needs_review": False,
+     "source": "camera", "scanned_at": "2026-07-25T00:00:00+00:00"},
+]
+
+
+def test_saved_records_per_row_delete_calls_delete_one(monkeypatch):
     import db
+    calls = []
     monkeypatch.setattr(db, "is_enabled", lambda: True)
-    monkeypatch.setattr(db, "fetch_all", lambda: [
-        {"igi_report_no": "809614206", "report_type": "CVD", "shape": "EMERALD",
-         "carat": "3.01", "color": "E", "clarity": "VS1", "needs_review": False,
-         "source": "camera", "scanned_at": "2026-07-25T00:00:00+00:00"},
-    ])
+    monkeypatch.setattr(db, "fetch_all", lambda: list(_SAVED_ROW))
     monkeypatch.setattr(db, "delete_all", lambda: True)
-    monkeypatch.setattr(db, "delete_one", lambda igi: True)
+    monkeypatch.setattr(db, "delete_one", lambda igi: calls.append(igi) or True)
     at = AppTest.from_file("app.py", default_timeout=120)
     at.run()
     assert not at.exception
     all_sub = " ".join(el.value for el in at.get("subheader")) if at.get("subheader") else ""
-    assert "Saved records" in all_sub
+    assert "Saved records" in all_sub          # section actually rendered
+    at.button(key="del_saved_809614206").click().run()
+    assert calls == ["809614206"]              # per-row delete really called db.delete_one
+
+
+def test_delete_all_only_fires_when_DELETE_typed(monkeypatch):
+    import db
+    n = {"count": 0}
+    monkeypatch.setattr(db, "is_enabled", lambda: True)
+    monkeypatch.setattr(db, "fetch_all", lambda: list(_SAVED_ROW))
+    monkeypatch.setattr(db, "delete_one", lambda igi: True)
+    monkeypatch.setattr(db, "delete_all", lambda: (n.__setitem__("count", n["count"] + 1), True)[1])
+    at = AppTest.from_file("app.py", default_timeout=120)
+    at.run()
+    at.button(key="delete_all_saved").click().run()                    # reveal confirm box
+    at.text_input(key="delete_all_confirm_text").set_value("nope").run()
+    at.button(key="confirm_delete_all_btn").click().run()
+    assert n["count"] == 0                                             # wrong text -> no delete
+    at.text_input(key="delete_all_confirm_text").set_value("DELETE").run()
+    at.button(key="confirm_delete_all_btn").click().run()
+    assert n["count"] == 1                                             # correct text -> delete fires
+    assert not at.exception

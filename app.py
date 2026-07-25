@@ -359,6 +359,7 @@ if db.is_enabled():
                     if typed == "DELETE":
                         db.delete_all()
                         st.session_state.confirm_delete_all = False
+                        st.session_state.pop("delete_all_confirm_text", None)
                         if db.fetch_all():  # rows still there -> the delete had no effect
                             st.warning("Delete had no effect — add the delete policy in Supabase (see README).")
                         else:
@@ -368,6 +369,7 @@ if db.is_enabled():
                         st.warning("Type DELETE exactly to confirm.")
                 if c2.button("Cancel", key="cancel_delete_all"):
                     st.session_state.confirm_delete_all = False
+                    st.session_state.pop("delete_all_confirm_text", None)
                     st.rerun()
 
             st.caption("Delete a single record:")
