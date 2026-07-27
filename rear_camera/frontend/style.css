@@ -1,0 +1,25 @@
+#container { position: relative; width: 100%; }
+#video { width: 100%; height: auto; display: block; background: #000; }
+
+/* Green guide box — MUST match imaging.GUIDE_BOX_* in the Python code:
+   width 78% of frame, 2:1 aspect, vertical center at 42% of frame height.
+   If you change these, change imaging.GUIDE_BOX_* (and vice versa) so the
+   visible box equals the region capture.center_box_crop crops. */
+#guidebox {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  width: 78%;
+  aspect-ratio: 2 / 1;
+  border: 3px dashed #00e000;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+#hint {
+  font: 13px/1.4 -apple-system, Segoe UI, Roboto, sans-serif;
+  color: #555;
+  text-align: center;
+  padding: 6px 4px;
+}

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>rear-camera</title>
+    <script src="./streamlit-component-lib.js"></script>
+    <link rel="stylesheet" href="./style.css" />
+    <script src="./main.js"></script>
+  </head>
+  <body>
+    <div id="container">
+      <video id="video" autoplay playsinline muted></video>
+      <div id="guidebox"></div>
+      <canvas id="canvas" style="display:none"></canvas>
+    </div>
+    <div id="hint">Tap the video · fit the whole tag inside the green box · avoid glare</div>
+  </body>
+</html>
