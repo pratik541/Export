@@ -23,22 +23,32 @@ desktop, the hamburger icon on mobile). **Manage** opens by default.
   table, Excel export, and (if Supabase is configured) the shared
   saved-records view with delete. This is the page "How it works" below
   describes.
-- **Scan** — a mobile-first page for one tag at a time: a single tap on the
-  rear-camera preview captures a tag, which is auto-cropped, OCR'd, and (if
-  Supabase is configured) auto-saved immediately — there's no separate
+- **Scan** — a mobile-first page for one tag at a time: the rear-camera
+  preview shows a green alignment box, and a single tap captures a tag and
+  always crops it to that box at the camera's native resolution — so every
+  Scan capture is framed the same way and contains the whole tag, whether or
+  not a barcode is visible. (Manage, described below, still crops to the
+  barcode position first — see "How it works".) The tag is then OCR'd and,
+  if Supabase is configured, auto-saved immediately — there's no separate
   "Run OCR" step. The result shows as a compact card sized to fit a phone
   screen without scrolling; if a field is missing or flagged for review, an
   inline "Fix this reading" expander lets you correct it and save on the
   spot. A "Use basic camera" toggle swaps in the standard
-  `st.camera_input()` widget if the rear-camera component doesn't work on
-  your device.
+  `st.camera_input()` widget, with the same green box, if the rear-camera
+  component doesn't work on your device.
 
-The Scan page's rear camera is provided by
-`streamlit-back-camera-input==0.1.1` (pinned in `requirements.txt`) — a
-pure-Python component, so no `packages.txt` change was needed. It asks the
-browser directly for the rear-facing camera (`facingMode: environment`),
-rather than requiring a webcam or a Phone Link pairing (see "Using a phone
-as the camera" below, which is a separate, Manage-page mechanism).
+The Scan page's rear camera is an in-repo vendored custom component at
+`rear_camera/` (static HTML/JS/CSS, no build step) — it replaced the
+`streamlit-back-camera-input` pip dependency used earlier, so there's now
+one less third-party package to track (no `packages.txt` change either way).
+It asks the browser directly for the rear-facing camera (`facingMode:
+environment`), rather than requiring a webcam or a Phone Link pairing (see
+"Using a phone as the camera" below, which is a separate, Manage-page
+mechanism), and draws the green guide box directly on the video preview. The
+box's geometry (width, aspect ratio, vertical position) is defined once in
+`imaging.GUIDE_BOX_*` and mirrored in the component's
+`rear_camera/frontend/style.css`, kept in sync by convention and guarded by
+a test.
 
 Automatically capturing the instant a tag is framed ("auto-click") is
 planned as a v2 enhancement — Android-first, using the browser's

@@ -67,23 +67,36 @@ photo bytes (upload or camera)
      crop_box, crop_method, auto_cropped, ocr_result=None}
 ```
 
+The crop fallback order above is what `build_item` does by default
+(`force_guide_box=False`) — the path Manage and uploads use. The **Scan**
+page instead calls `build_item(..., force_guide_box=True)` (threaded through
+`ui_common.add_image`), which skips barcode detection entirely and always
+crops to the guide-box region (`crop_method = "guide_box"`) at the camera's
+native resolution — so every Scan capture is cropped consistently
+shot-to-shot and contains the whole tag, whether or not a barcode is
+visible. Manage keeps the barcode-first behavior described above unchanged.
+
 The item is now sitting in the gallery, cropped but **not yet OCR'd**
 (`ocr_result` starts `None`). `crop_method` records how the crop happened
 (`"barcode"`, `"guide_box"`, or `None`) and `auto_cropped` is just
 `crop_method is not None`; consumers currently only branch on `auto_cropped`
 and `ocr_result`, so `crop_method` is informational. The user can leave the
 auto-crop as-is, or discard it and drag a manual box instead
-(`streamlit-cropper`, in `app.py`) — a manual re-crop sets `crop_method` to
-`"manual"` and clears `ocr_result` so a stale result from before the re-crop
-is never mistaken for current.
+(`streamlit-cropper`, in `page_manage.py`) — a manual re-crop sets
+`crop_method` to `"manual"` and clears `ocr_result` so a stale result from
+before the re-crop is never mistaken for current.
 
-The on-screen guide box (camera preview only) is a CSS overlay in `app.py`
-sized to the same width/aspect/vertical-center fractions as
-`imaging.center_box_crop` (`imaging.GUIDE_BOX_WIDTH_FRAC`,
-`GUIDE_BOX_ASPECT`, `GUIDE_BOX_CENTER_Y_FRAC`) — the two are meant to agree
-so the crop matches what's visually framed, but the CSS can't import from
-`imaging.py`, so this is a manually-kept-in-sync convention, not an enforced
-one: if the constants change, the CSS must be updated to match by hand.
+The green guide box itself is drawn in two places that must agree, both
+sized to the same width/aspect/vertical-center fractions
+(`imaging.GUIDE_BOX_WIDTH_FRAC`, `GUIDE_BOX_ASPECT`,
+`GUIDE_BOX_CENTER_Y_FRAC`) as `imaging.center_box_crop` crops: the vendored
+`rear_camera/frontend/style.css` (Scan's default rear-camera view) and
+`ui_common.CAMERA_GUIDE_CSS` (the `st.camera_input()` fallback used by both
+Manage's camera capture and Scan's "Use basic camera" toggle). Neither CSS
+file can import from `imaging.py`, so this is a manually-kept-in-sync
+convention, not an enforced one — if the constants change, both CSS files
+must be updated to match by hand (`tests/test_ui_common.py` guards the
+constants' current values as a reminder).
 
 ### 2. OCR, on demand (`pipeline.process_image`)
 
@@ -130,11 +143,12 @@ the export."
 | `app.py` | `st.navigation` entry point: sets `st.set_page_config`, runs the one-time OCR model warmup, calls `ui_common.init_state()`, and registers the two pages (`page_manage.render` at `url_path="manage"`, default; `page_scan.render` at `url_path="scan"`) |
 | `ui_common.py` | Shared, page-agnostic helpers and session-state used by both pages: `add_image`, `run_ocr`, `autosave`, `delete_item`, `item_status`, `FIELD_LABELS`, the camera guide-box CSS |
 | `page_manage.py` | The **Manage** page (`render()`): the full desktop workflow — file upload + camera input feeding a gallery, manual re-crop overlay (`streamlit-cropper`), per-item/"OCR all" triggers, results table, Excel download, saved-records view/delete |
-| `page_scan.py` | The **Scan** page (`render()`): mobile rear one-tap camera (`streamlit-back-camera-input`, falling back to `st.camera_input`) → auto-OCR → auto-save → a compact no-scroll result card with an inline "Fix this reading" expander |
-| `capture.py` | `build_item(image_bytes, filename, source, item_id)` — turns raw capture bytes into a gallery item: decodes the barcode, auto-crops to the label when a usable box is found (else falls back to the full image), does **not** run OCR |
+| `page_scan.py` | The **Scan** page (`render()`): mobile rear one-tap camera (vendored `rear_camera` component, green alignment box, falling back to `st.camera_input` with the same box) → always-crop-to-box auto-OCR → auto-save → a compact no-scroll result card with an inline "Fix this reading" expander |
+| `rear_camera/` | In-repo vendored custom component (`rear_camera_input()`): static HTML/JS/CSS (no build step), no pip dependency. Shows the phone's rear camera with a green guide box drawn in `frontend/style.css`, captures at the camera's native resolution on tap, and returns PNG bytes |
+| `capture.py` | `build_item(image_bytes, filename, source, item_id, force_guide_box=False)` — turns raw capture bytes into a gallery item: decodes the barcode, auto-crops to the label when a usable box is found (else falls back to the full image); `force_guide_box=True` (used by Scan) skips barcode detection and always crops to the guide-box region instead. Does **not** run OCR |
 | `pipeline.py` | `process_image(image_bytes, filename)` — orchestrates one (already-cropped) image through the OCR stage above |
 | `quality.py` | The pre-OCR quality gate (blur/exposure/text-presence checks) |
-| `imaging.py` | OpenCV preprocessing (grayscale, denoise, adaptive threshold) — used for barcode/QR decoding only; also `crop_to_label`/`label_crop_box` (the barcode-anchored auto-crop) and `center_box_crop` (the guide-box crop fallback for camera captures), both used by `capture.py` |
+| `imaging.py` | OpenCV preprocessing (grayscale, denoise, adaptive threshold) — used for barcode/QR decoding only; also `crop_to_label`/`label_crop_box` (the barcode-anchored auto-crop), `center_box_crop` (the guide-box crop, used for Manage's camera fallback and always for Scan), and the `GUIDE_BOX_WIDTH_FRAC`/`GUIDE_BOX_ASPECT`/`GUIDE_BOX_CENTER_Y_FRAC` constants defining that box's geometry — all used by `capture.py` |
 | `decoding.py` | Barcode/QR decoding via `pyzbar` |
 | `ocr.py` | OCR via PaddleOCR, plus the row-reconstruction logic that turns its per-text-box detections into printed lines |
 | `parsing.py` | Regex/whitelist field extraction and validation |
@@ -149,15 +163,17 @@ The app is `st.navigation`-based, with two pages:
   described throughout this document: upload/camera capture into a gallery,
   manual re-crop, per-item/batch OCR, the results table, Excel export, and
   the optional Supabase saved-records view.
-- **Scan** (`page_scan.py`) — a mobile-first page: a single tap on the
-  rear-camera preview captures a tag, which is immediately auto-cropped,
-  OCR'd, and (if Supabase is configured) auto-saved, with no separate
+- **Scan** (`page_scan.py`) — a mobile-first page: the rear-camera preview
+  shows a green alignment box, and a single tap captures a tag and always
+  crops it to that box at the camera's native resolution
+  (`force_guide_box=True`, unlike Manage's barcode-first crop), then gets
+  OCR'd and (if Supabase is configured) auto-saved, with no separate
   "Run OCR" step. The result renders as a compact card sized to fit a phone
   screen without scrolling, and — if a field is missing or flagged for
   review — an inline "Fix this reading" expander lets that field be
   corrected and saved on the spot. A "Use basic camera" toggle swaps in the
-  standard `st.camera_input()` widget if the rear-camera component isn't
-  available.
+  standard `st.camera_input()` widget, with the same green box, if the
+  rear-camera component isn't available.
 
 Wiring: `app.py` is the `st.navigation` entry point — it owns
 `st.set_page_config` and the one-time OCR warmup (each must run exactly
@@ -175,11 +191,15 @@ in common (auto-crop, OCR, autosave, status labels). Nothing about the OCR,
 parsing, cropping, decoding, Excel, or Supabase-schema logic described
 elsewhere in this document changed to support the split.
 
-**New dependency**: `streamlit-back-camera-input==0.1.1`, pinned in
-`requirements.txt`. It's pure Python — no `packages.txt` change was
-needed — and requests the browser's rear-facing camera directly
-(`facingMode: environment`), rather than needing a webcam or a Phone Link
-pairing (see `README.md`).
+**Rear-camera component**: Scan's rear camera is `rear_camera/`, an in-repo
+vendored custom component (static HTML/JS/CSS, no build step) — it replaced
+the `streamlit-back-camera-input` pip dependency used earlier, so there's no
+third-party package for this and no `packages.txt` change either way. It
+requests the browser's rear-facing camera directly (`facingMode:
+environment`), rather than needing a webcam or a Phone Link pairing (see
+`README.md`), and draws the green guide box that Scan always crops to (see
+"Pipeline" above for the box-geometry sync between `imaging.GUIDE_BOX_*`
+and the component's CSS).
 
 **Not in this release**: automatically capturing the instant a tag is
 framed ("auto-click") is planned as a v2 enhancement — Android-first, using
