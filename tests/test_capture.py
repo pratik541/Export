@@ -1,7 +1,12 @@
+from pathlib import Path
+
 import cv2
 import numpy as np
 
 import capture
+import decoding
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def _png_bytes(image):
@@ -97,3 +102,24 @@ def test_build_item_barcode_crop_sets_crop_method_barcode(monkeypatch):
     assert item["crop_method"] == "barcode"
     assert item["auto_cropped"] is True
     assert item["crop_box"] is not None
+
+
+def _fixture_with_usable_barcode():
+    data = (FIXTURES / "sample_tag.jpeg").read_bytes()
+    import numpy as np, cv2
+    img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+    box = decoding.decode_barcodes(img).get("barcode_box")
+    assert capture._is_usable_box(box), "precondition: sample_tag must decode a usable barcode"
+    return data
+
+
+def test_force_guide_box_crops_to_box_even_when_barcode_present():
+    data = _fixture_with_usable_barcode()
+    item = capture.build_item(data, "sample_tag.jpeg", "camera", 1, force_guide_box=True)
+    assert item["crop_method"] == "guide_box"   # NOT "barcode"
+
+
+def test_without_force_guide_box_barcode_crop_still_used():
+    data = _fixture_with_usable_barcode()
+    item = capture.build_item(data, "sample_tag.jpeg", "camera", 1)
+    assert item["crop_method"] == "barcode"      # default behavior preserved

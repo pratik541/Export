@@ -58,14 +58,15 @@ def init_state():
     st.session_state.setdefault("camera_gen", 0)     # bump to reset the camera
 
 
-def add_image(data: bytes, filename: str, source: str):
+def add_image(data: bytes, filename: str, source: str, force_guide_box: bool = False):
     """Add one image as a gallery item. Returns the new item, or None if it was
-    a duplicate / unreadable (so the caller can decide whether to auto-OCR)."""
+    a duplicate / unreadable. force_guide_box forces a guide-box crop (Scan)."""
     digest = hashlib.md5(data).hexdigest()
     if digest in st.session_state.seen_hashes:
         return None
     try:
-        item = capture.build_item(data, filename, source, st.session_state.next_id)
+        item = capture.build_item(data, filename, source, st.session_state.next_id,
+                                  force_guide_box=force_guide_box)
     except ValueError as exc:
         st.warning(f"{filename}: {exc}")
         st.session_state.seen_hashes.add(digest)

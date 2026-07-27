@@ -17,35 +17,47 @@ def _is_usable_box(box):
     return box is not None and box[2] > 1 and box[3] > 1
 
 
-def build_item(image_bytes: bytes, filename: str, source: str, item_id: int) -> dict:
+def build_item(image_bytes: bytes, filename: str, source: str, item_id: int,
+               force_guide_box: bool = False) -> dict:
     """Turn raw image bytes into a gallery item: decode, then crop for OCR.
-    Crop priority: (1) usable barcode box -> label crop; (2) no usable box but
-    source == "camera" -> guide-box region crop (matches the on-screen box);
-    (3) otherwise (e.g. uploads with no barcode) -> full image. Does NOT run OCR
-    (ocr_result starts None). Raises ValueError on undecodable bytes."""
+
+    When force_guide_box is True (Scan page), always crop to the on-screen guide
+    box (imaging.center_box_crop) and skip barcode detection — so the crop is
+    identical shot-to-shot and matches the green box the user framed.
+
+    Otherwise crop priority is: (1) usable barcode box -> label crop; (2) no
+    usable box but source == "camera" -> guide-box region crop; (3) otherwise
+    (e.g. uploads with no barcode) -> full image. Does NOT run OCR (ocr_result
+    starts None). Raises ValueError on undecodable bytes."""
     image = _decode_image_bytes(image_bytes)
     if image is None:
         raise ValueError("Could not read image file — it may be corrupt.")
 
-    decoded = decoding.decode_barcodes(image)
-    barcode_box = decoded.get("barcode_box")
-
     crop_box = None
-    if _is_usable_box(barcode_box):
-        crop_box = imaging.label_crop_box(image, barcode_box)
-        ok, buf = cv2.imencode(".jpg", imaging.crop_to_label(image, barcode_box))
-        if ok:
-            cropped_bytes, crop_method = buf.tobytes(), "barcode"
-        else:
-            cropped_bytes, crop_method, crop_box = image_bytes, None, None
-    elif source == "camera":
+    if force_guide_box:
         ok, buf = cv2.imencode(".jpg", imaging.center_box_crop(image))
         if ok:
             cropped_bytes, crop_method = buf.tobytes(), "guide_box"
         else:
             cropped_bytes, crop_method = image_bytes, None
     else:
-        cropped_bytes, crop_method = image_bytes, None
+        decoded = decoding.decode_barcodes(image)
+        barcode_box = decoded.get("barcode_box")
+        if _is_usable_box(barcode_box):
+            crop_box = imaging.label_crop_box(image, barcode_box)
+            ok, buf = cv2.imencode(".jpg", imaging.crop_to_label(image, barcode_box))
+            if ok:
+                cropped_bytes, crop_method = buf.tobytes(), "barcode"
+            else:
+                cropped_bytes, crop_method, crop_box = image_bytes, None, None
+        elif source == "camera":
+            ok, buf = cv2.imencode(".jpg", imaging.center_box_crop(image))
+            if ok:
+                cropped_bytes, crop_method = buf.tobytes(), "guide_box"
+            else:
+                cropped_bytes, crop_method = image_bytes, None
+        else:
+            cropped_bytes, crop_method = image_bytes, None
 
     return {
         "id": item_id,
