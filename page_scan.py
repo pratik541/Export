@@ -7,32 +7,36 @@ import db
 import ui_common
 
 try:
-    from streamlit_back_camera_input import back_camera_input
-    _HAS_BACK_CAM = True
+    from rear_camera import rear_camera_input
+    _HAS_REAR_CAM = True
 except Exception:  # noqa: BLE001 - component missing/broken -> basic-camera fallback
-    back_camera_input = None
-    _HAS_BACK_CAM = False
+    rear_camera_input = None
+    _HAS_REAR_CAM = False
 
 
 def _capture_widget():
     """Show the camera and return captured image bytes, or None. Prefers the
-    rear one-tap camera; falls back to the basic camera if unavailable or if the
-    user toggles it. The try/except also makes this safe under AppTest, where the
-    custom component has no browser."""
+    vendored rear-camera component (rear camera + built-in green guide box);
+    falls back to st.camera_input (with the same guide-box overlay) if the
+    component is unavailable or the user toggles it. The try/except also makes
+    this safe under AppTest, which has no browser for the custom component."""
     use_basic = st.toggle(
-        "Use basic camera", value=not _HAS_BACK_CAM,
+        "Use basic camera", value=not _HAS_REAR_CAM,
         help="Switch this on if the rear camera doesn't work on your phone.",
     )
     key = f"cam_{st.session_state.camera_gen}"
-    if _HAS_BACK_CAM and not use_basic:
-        st.caption("Tap the video to snap · fill the frame with the tag · avoid glare")
+    if _HAS_REAR_CAM and not use_basic:
         try:
-            shot = back_camera_input(key=f"back_{key}")
+            return rear_camera_input(key=f"rear_{key}")  # bytes or None
         except Exception:  # noqa: BLE001
             st.warning("Rear camera unavailable here — turn on 'Use basic camera'.")
             return None
-        return shot.getvalue() if shot is not None else None
-    shot = st.camera_input("Point at the tag and shoot", key=f"basic_{key}")
+    # Fallback: native camera with the same green guide box as Manage.
+    st.markdown(ui_common.CAMERA_GUIDE_CSS, unsafe_allow_html=True)
+    with st.container(key="camera_guide"):
+        shot = st.camera_input("Point at the tag and shoot", key=f"basic_{key}",
+                               label_visibility="collapsed")
+    st.caption("Fit the whole tag inside the box · hold steady · avoid glare")
     return shot.getvalue() if shot is not None else None
 
 
@@ -77,7 +81,8 @@ def render():
 
     data = _capture_widget()
     if data is not None:
-        item = ui_common.add_image(data, f"scan_{st.session_state.next_id}.png", "camera")
+        item = ui_common.add_image(data, f"scan_{st.session_state.next_id}.png",
+                                   "camera", force_guide_box=True)
         if item is not None:
             with st.spinner("Reading tag..."):
                 ui_common.run_ocr(item)
