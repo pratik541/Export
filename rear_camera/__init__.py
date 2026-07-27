@@ -16,10 +16,14 @@ _component_func = components.declare_component("rear_camera", path=str(_frontend
 
 
 def _decode_data_url(data_url: Optional[str]) -> Optional[bytes]:
-    """Decode a 'data:image/png;base64,...' URL to raw PNG bytes; None if falsy."""
+    """Decode a 'data:image/png;base64,...' URL to raw PNG bytes; None if falsy
+    or malformed (no comma separator)."""
     if not data_url:
         return None
-    return base64.b64decode(data_url.split(",", 1)[1])
+    parts = data_url.split(",", 1)
+    if len(parts) != 2:
+        return None
+    return base64.b64decode(parts[1])
 
 
 def rear_camera_input(height: int = 460, key: Optional[str] = None) -> Optional[bytes]:

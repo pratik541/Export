@@ -15,3 +15,7 @@ def test_decode_data_url_returns_png_bytes():
 def test_decode_data_url_none_when_empty():
     assert rear_camera._decode_data_url(None) is None
     assert rear_camera._decode_data_url("") is None
+
+
+def test_decode_data_url_none_when_no_comma():
+    assert rear_camera._decode_data_url("garbage-no-comma") is None
