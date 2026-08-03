@@ -98,3 +98,32 @@ def test_parses_real_jumbled_ocr_output():
     assert f["clarity"] == "VS"
     assert f["style_no"] == "AFDN352/9"
     assert parsing_jewelry.validate_jewelry_fields(f)["needs_review"] is False
+
+
+# A SECOND real OCR pass of the same card with different, worse misreads: the
+# Shape-and-Cut/Est-Weight labels zipper onto one line, Clarity's value itself is
+# misread ("VS" -> "V5"), and the "Style#" LABEL is misread beyond recognition
+# ("Shyios"). This is the true regression that broke production a second time:
+# whitelist-matching the clarity value, and label-anchoring the style code,
+# both failed here even though the values are plainly present in the text.
+REAL_OCR_2 = "\n".join([
+    "INTERNATIONAL GEMOLOGICAL LABORATORY GROWN DIAMOND JEWELRY REPORT",
+    "INSTITUTE",
+    "Report No. One (1) Laboratory Grawn Diamond Description : One Siver Pendant "
+    "with Chaln, welghing In fotal 2.06 g.. containing :45J331622607",
+    "Shape and Cut Est, Weight : (1) Oval Brilliant : 0.54 Carat",
+    "Clarity Color : V5 :E-F",
+    "Comments Weights purported by the cllent. Report number engraved. Shyios "
+    "AFDN352/8 : Grading & Identification as mounling permits. Descripfion and",
+])
+
+
+def test_parses_second_real_ocr_pass_with_zippered_lines_and_misreads():
+    f = parsing_jewelry.parse_jewelry(REAL_OCR_2)
+    assert f["report_no"] == "45J331622607"          # verbatim, incl. OCR digit noise
+    assert f["shape_cut"] == "(1) Oval Brilliant"      # NOT "Est, Weight : ..."
+    assert f["est_weight"] == "0.54 Carat"
+    assert f["color"] == "E-F"
+    assert f["clarity"] == "V5"                        # verbatim misread, NOT "VS"
+    assert f["style_no"] == "AFDN352/8"                # found despite "Shyios" label
+    assert parsing_jewelry.validate_jewelry_fields(f)["needs_review"] is False
