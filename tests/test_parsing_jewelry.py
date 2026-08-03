@@ -127,3 +127,35 @@ def test_parses_second_real_ocr_pass_with_zippered_lines_and_misreads():
     assert f["clarity"] == "V5"                        # verbatim misread, NOT "VS"
     assert f["style_no"] == "AFDN352/8"                # found despite "Shyios" label
     assert parsing_jewelry.validate_jewelry_fields(f)["needs_review"] is False
+
+
+# A THIRD real OCR pass of the same card: the Shape/Weight labels zipper in the
+# OPPOSITE order from REAL_OCR_2 ("Est. Woiolt Shape and Cut : v1 : v2" instead
+# of "Shape and Cut Est, Weight : v1 : v2"), BOTH "Weight" and "Carat" are
+# misread ("Woiolt", "Corat") so neither anchor works, AND the Clarity/Color
+# VALUE ORDER FLIPPED relative to the first two passes (color's value now comes
+# BEFORE clarity's value on the zippered line, ":t-F : VS" not ": VS :E-F").
+# This is the true regression that broke a third time: label-print-order can't
+# be trusted to predict value order, and a garbled label+unit pair can blank a
+# field that assumes only one of them will ever be misread at a time.
+REAL_OCR_3 = "\n".join([
+    "INTERNATIONAL GEMOLOGICAL LAIORATORY GROWN DIAMOND JEWELRY REPORT",
+    "ANRw INSTITUTE",
+    "Description Report No, One (1) Loboratory Grown Dlomond :45J331622607 : One "
+    "siver Pendont wilin Chaln, welghing in fotol 2.06 g. contolning",
+    "Est. Woiolt Shape and Cut : (1) Oval Brilliant : 0.54 Corat",
+    "Clarity Color :t-F : VS",
+    "Comments Weights purported by the cllent, Report rumber engraved. Stylo# "
+    "AFDN352/8 : Grading & identincalion as mounting pemits. Description and",
+])
+
+
+def test_parses_third_real_ocr_pass_with_flipped_value_order_and_double_misreads():
+    f = parsing_jewelry.parse_jewelry(REAL_OCR_3)
+    assert f["report_no"] == "45J331622607"
+    assert f["shape_cut"] == "(1) Oval Brilliant"
+    assert f["est_weight"] == "0.54 Corat"    # located positionally; "Corat"/"Woiolt" both misread
+    assert f["clarity"] == "VS"                # correct despite the value-order flip
+    assert f["color"] == "t-F"                 # verbatim; located by its dash shape, not order
+    assert f["style_no"] == "AFDN352/8"
+    assert parsing_jewelry.validate_jewelry_fields(f)["needs_review"] is False

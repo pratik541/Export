@@ -1,18 +1,21 @@
 """Parser for the IGI Laboratory Grown Diamond Jewelry Report card.
 
-Real phone photos of this card do NOT OCR as clean "Label : value" lines. The
-two-column layout makes PaddleOCR zipper adjacent labels and values together on
-one line ("Shape and Cut Est, Weight : (1) Oval Brilliant : 0.54 Carat",
-"Clarity Color : V5 :E-F"), and OCR sometimes misreads the label words
-themselves ("Style#" -> "Stylo#" / "Shyios") or individual characters inside a
-value ("VS" -> "V5").
+Real phone photos of this card do NOT OCR as clean "Label : value" lines, and
+NEITHER the label text NOR the value order is reliable across different scans of
+the same card:
+  - Labels zipper together on one line in either order ("Shape and Cut Est,
+    Weight : v1 : v2" one scan, "Est. Woiolt Shape and Cut : v1 : v2" another).
+  - The VALUE order on a zippered line does not always match the label order
+    (Clarity/Color values have been seen in both orders across scans).
+  - Label AND unit words themselves get misread ("Style#" -> "Shyios", "Weight"
+    -> "Woiolt", "Carat" -> "Corat").
 
-So we LOCATE each field's value by POSITION (which label came first on a
-zippered line determines which colon-separated slot is its value) rather than
-by matching label spelling or validating value spelling against a whitelist —
-validating spelling caused a real failure (clarity "V5" didn't match the "VS"
-whitelist and was dropped). Once located, the value is stored EXACTLY as OCR
-produced it -- no reformatting, no spelling correction, no guessing."""
+So fields are located either (a) by the field's OWN label when it happens to be
+legible plus its position on the line (not by the OTHER label's spelling), or
+(b) by the VALUE's own distinctive shape (digit run, colour range, carat
+number), never by matching a value against a fixed whitelist of spellings. Once
+located, the value is stored EXACTLY as OCR produced it -- no reformatting, no
+spelling correction, no guessing."""
 import re
 
 _FIELD_KEYS = ("report_no", "shape_cut", "est_weight", "color", "clarity", "style_no")
@@ -35,7 +38,9 @@ def _value_between_colons_after(pos: int, line: str):
 
 def _extract_after_label(raw_text: str, label_pattern: str):
     """Find a line containing `label_pattern` and return the value located via
-    _value_between_colons_after right after the label match."""
+    _value_between_colons_after right after the label match. Order-independent:
+    it only looks at what follows the label's OWN match position, so it doesn't
+    matter whether some other label was zippered in before it on the line."""
     label_re = re.compile(label_pattern, re.IGNORECASE)
     for line in raw_text.splitlines():
         match = label_re.search(line)
@@ -46,11 +51,35 @@ def _extract_after_label(raw_text: str, label_pattern: str):
     return None
 
 
+def _last_colon_value(raw_text: str, label_pattern: str):
+    """On the line containing `label_pattern`, return the text after the LAST
+    ':' on that line. Used as a last-resort positional fallback for a field
+    whose own label/unit word got misread: on a two-value zippered line, once
+    the OTHER field's value has been claimed from the middle slot, whatever
+    follows the final colon is this field's value -- located by position on the
+    line, not by this field's own (possibly garbled) label spelling."""
+    label_re = re.compile(label_pattern, re.IGNORECASE)
+    for line in raw_text.splitlines():
+        if label_re.search(line) and line.count(":") >= 2:
+            value = line.rsplit(":", 1)[1].strip(" .:-")
+            if value:
+                return value
+    return None
+
+
+def _looks_like_color_range(value):
+    """A colour grade range looks like two letters joined by a dash (e.g.
+    'E-F', 'E - F'), regardless of OCR noise on the letters themselves."""
+    return bool(value) and bool(re.search(r"[A-Za-z]\s*[-–]\s*[A-Za-z]", value))
+
+
 def _extract_clarity_and_color(raw_text: str):
-    """The card zippers these onto one line: 'Clarity Color : <clarity> :<color>'
-    (label order matches value order). Locate by POSITION -- whichever label
-    comes first on the line determines which colon-slot is its value -- so an
-    OCR misread inside the value (e.g. "VS" -> "V5") never blocks extraction."""
+    """The card zippers these onto one line: 'Clarity Color : <v1> :<v2>'. Which
+    of v1/v2 is the colour value is decided by SHAPE (colour is a letter-dash-
+    letter range) rather than by label print order, because the value order on
+    this line has been observed to NOT always match the label order across
+    different scans. Falls back to label-print order only when neither/both
+    values look like a colour range."""
     for line in raw_text.splitlines():
         lower = line.lower()
         clarity_pos = lower.find("clarity")
@@ -62,11 +91,16 @@ def _extract_clarity_and_color(raw_text: str):
         parts = line.split(":")
         if len(parts) < 3:
             continue
-        first_value = parts[1].strip(" .:-") or None
-        second_value = parts[2].strip(" .:-") or None
+        candidates = [parts[1].strip(" .:-") or None, parts[2].strip(" .:-") or None]
+        is_color_shaped = [_looks_like_color_range(v) for v in candidates]
+        if is_color_shaped[0] and not is_color_shaped[1]:
+            return candidates[1], candidates[0]        # clarity, color
+        if is_color_shaped[1] and not is_color_shaped[0]:
+            return candidates[0], candidates[1]
+        # Ambiguous (both or neither look like a colour range) -> label order.
         if clarity_pos < color_pos:
-            return first_value, second_value
-        return second_value, first_value
+            return candidates[0], candidates[1]
+        return candidates[1], candidates[0]
     return None, None
 
 
@@ -81,7 +115,8 @@ _REPORTNO_ANCHORED = re.compile(
 _REPORTNO_GLOBAL = re.compile("(" + _REPORTNO_TOKEN + ")")
 
 # Est. Weight: the carat value has a distinctive numeric shape ("0.56 Carat"),
-# so it's found directly regardless of which label it's zippered against.
+# so it's usually found directly regardless of which label it's zippered
+# against, unless "Carat" itself is misread (see the positional fallback below).
 _WEIGHT_PATTERN_RE = re.compile(r"(\d+\.\d{1,2}\s*carat)", re.IGNORECASE)
 
 # Style code: a real IGI style code looks like AFDN352/9 -- a few uppercase
@@ -108,8 +143,11 @@ def parse_jewelry(raw_text: str) -> dict:
     fields["report_no"] = (_first_group(_REPORTNO_ANCHORED, raw_text)
                            or _first_group(_REPORTNO_GLOBAL, raw_text))
     fields["shape_cut"] = _extract_after_label(raw_text, r"shape\s*and\s*cut")
-    fields["est_weight"] = (_first_group(_WEIGHT_PATTERN_RE, raw_text)
-                            or _extract_after_label(raw_text, r"est\.?\s*weight"))
+    fields["est_weight"] = (
+        _first_group(_WEIGHT_PATTERN_RE, raw_text)
+        or _extract_after_label(raw_text, r"est\.?\s*weight")
+        or _last_colon_value(raw_text, r"shape\s*and\s*cut")
+    )
 
     clarity, color = _extract_clarity_and_color(raw_text)
     fields["clarity"] = clarity or _extract_after_label(raw_text, r"clarity")
