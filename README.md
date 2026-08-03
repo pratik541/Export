@@ -106,7 +106,12 @@ saved scan lands in.
    have no such guide box to fall back to, so an upload with no usable
    barcode keeps the full, uncropped photo instead of failing. Each item
    records how it was cropped in a `crop_method` field (`"barcode"`,
-   `"guide_box"`, `"manual"`, or `None` for the uncropped fallback).
+   `"guide_box"`, `"perspective"` (jewelry cards, whose guide-box fallback is
+   perspective-corrected to a flat rectangle rather than statically cropped),
+   `"manual"`, or `None` for the uncropped fallback). A jewelry camera capture
+   can also be rejected before it ever becomes a gallery item — with a
+   warning message — if the perspective correction can't confidently find the
+   card's edges.
 3. **Gallery** — every captured photo appears as a thumbnail (the cropped
    version) with a status: not yet scanned, OK, needs review, or failed, plus
    a note if auto-crop couldn't find a barcode. A metrics row above the

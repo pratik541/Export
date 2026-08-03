@@ -108,9 +108,14 @@ JEWELRY_SEARCH_PAD_FRAC = 0.15      # extra margin around the guide box searched
 
 def _jewelry_search_region_box(image):
     """(left, top, right, bottom) for the jewelry guide-box region expanded by
-    JEWELRY_SEARCH_PAD_FRAC on each side, clamped to the image bounds. Wider
-    than the guide box itself so modest user misalignment doesn't clip the
-    card's real edges out of the search."""
+    JEWELRY_SEARCH_PAD_FRAC on each side, clamped to the image bounds. In
+    practice this clamps out to (or very near) the full frame for the current
+    guide-box geometry (JEWELRY_GUIDE_BOX_WIDTH_FRAC=0.92 already covers most
+    of the frame width) -- the search is effectively whole-photo, not a
+    restricted sub-region. _find_card_quad's area/aspect thresholds are what
+    actually keep it from picking up unrelated background objects, not this
+    clamp. Kept as a real (if usually no-op) computation rather than removed,
+    in case guide-box geometry changes later make it a genuine restriction."""
     h, w = image.shape[:2]
     box_w = JEWELRY_GUIDE_BOX_WIDTH_FRAC * w
     box_h = box_w / JEWELRY_GUIDE_BOX_ASPECT

@@ -115,12 +115,20 @@ before the re-crop is never mistaken for current.
 
 `build_item` also takes `card_type` (`"diamond"`, the default, or
 `"jewelry"`), stamped onto the item as `item["card_type"]` and threaded from
-the page's "Card type" radio through `ui_common.add_image`. For
-`card_type="jewelry"`, both `imaging.crop_to_label`'s barcode path and the
-guide-box fallback route through `imaging.guide_box_crop(image, card_type)`,
-which picks the jewelry-sized box (see below) instead of the diamond one —
-everything else in this capture flow (crop_method bookkeeping, manual re-crop,
-gallery item shape) is identical between card types.
+the page's "Card type" radio through `ui_common.add_image`. The barcode path
+still uses `imaging.crop_to_label` for either card type; it's the guide-box
+fallback that differs — for `card_type="jewelry"` it routes through
+`imaging.perspective_correct_jewelry_card(image)` instead of
+`imaging.guide_box_crop(image, card_type)`, detecting the card's edges near
+the guide box and warping them flat rather than taking a static crop. This
+means `crop_method` bookkeeping is **not** identical between card types
+anymore: a jewelry guide-box crop records `crop_method = "perspective"`
+(diamond still records `"guide_box"`), and unlike the diamond path, a jewelry
+camera capture can be rejected outright — `perspective_correct_jewelry_card`
+raises `ValueError` if it can't confidently find the card's edges,
+`ui_common.add_image` catches it and shows `st.warning(...)`, and the item is
+never added to the gallery. Manual re-crop and gallery item shape otherwise
+remain identical between card types.
 
 The green guide box itself is drawn in two places that must agree, both
 sized to the same width/aspect/vertical-center fractions
@@ -226,12 +234,12 @@ the export."
 | `page_manage.py` | The **Manage** page (`render()`): "Card type" selector, file upload + camera input feeding a gallery, manual re-crop overlay (`streamlit-cropper`), per-item/"OCR all" triggers, results table, Excel download, and saved-records views/delete for **both** stores (`tag_scans`, `jewelry_scans`) |
 | `page_scan.py` | The **Scan** page (`render()`): "Card type" selector, mobile rear one-tap camera (vendored `rear_camera` component, green alignment box sized per card type, falling back to `st.camera_input` with the same box) → always-crop-to-box auto-OCR (`pipeline` or `pipeline_jewelry`) → auto-save → a compact no-scroll result card with an inline "Fix this reading" expander |
 | `rear_camera/` | In-repo vendored custom component (`rear_camera_input()`): static HTML/JS/CSS (no build step), no pip dependency. Shows the phone's rear camera with a green guide box drawn in `frontend/style.css`, sized via optional `box_width_pct`/`box_aspect`/`box_center_y_pct` arguments (used for the jewelry card's bigger box), captures at the camera's native resolution on tap, and returns PNG bytes |
-| `capture.py` | `build_item(image_bytes, filename, source, item_id, force_guide_box=False, card_type="diamond")` — turns raw capture bytes into a gallery item: decodes the barcode, auto-crops to the label when a usable box is found (else falls back to the full image); `force_guide_box=True` (used by Scan) skips barcode detection and always crops to the guide-box region instead; `card_type` selects the box geometry via `imaging.guide_box_crop`. Does **not** run OCR |
+| `capture.py` | `build_item(image_bytes, filename, source, item_id, force_guide_box=False, card_type="diamond")` — turns raw capture bytes into a gallery item: decodes the barcode, auto-crops to the label when a usable box is found (else falls back to the full image); `force_guide_box=True` (used by Scan) skips barcode detection and always crops/rectifies via `_crop_for_camera` instead — `imaging.guide_box_crop` for diamond, `imaging.perspective_correct_jewelry_card` for jewelry (which can raise `ValueError` and reject the capture). Does **not** run OCR |
 | `pipeline.py` | `process_image(image_bytes, filename)` — orchestrates one (already-cropped) diamond-tag image through the OCR stage above |
 | `parsing_jewelry.py` | `parse_jewelry(raw_text)` / `validate_jewelry_fields(fields)` — the verbatim, label-anchored jewelry-card field extraction described in "Jewelry-card fields" above; no normalization or whitelist checks |
 | `pipeline_jewelry.py` | `process_image(image_bytes, filename)` — same quality gate + OCR engine as `pipeline.py`, no barcode/QR step, parses with `parsing_jewelry.py` |
 | `quality.py` | The pre-OCR quality gate (blur/exposure/text-presence checks); shared by both pipelines |
-| `imaging.py` | OpenCV preprocessing (grayscale, denoise, adaptive threshold) — used for barcode/QR decoding only; also `crop_to_label`/`label_crop_box` (the barcode-anchored auto-crop), `center_box_crop` (the parameterized guide-box crop) and `guide_box_crop(image, card_type)` (picks diamond vs. jewelry geometry), and the `GUIDE_BOX_WIDTH_FRAC`/`GUIDE_BOX_ASPECT`/`GUIDE_BOX_CENTER_Y_FRAC` and `JEWELRY_GUIDE_BOX_WIDTH_FRAC`/`_ASPECT`/`_CENTER_Y_FRAC` constants defining each box's geometry — all used by `capture.py` |
+| `imaging.py` | OpenCV preprocessing (grayscale, denoise, adaptive threshold) — used for barcode/QR decoding only; also `crop_to_label`/`label_crop_box` (the barcode-anchored auto-crop), `center_box_crop` (the parameterized guide-box crop) and `guide_box_crop(image, card_type)` (picks diamond vs. jewelry geometry) for the diamond guide-box path, `perspective_correct_jewelry_card(image)` (detects the card's edges near the jewelry guide box and warps them flat, raising `ValueError` if not confidently found) for the jewelry guide-box path, and the `GUIDE_BOX_WIDTH_FRAC`/`GUIDE_BOX_ASPECT`/`GUIDE_BOX_CENTER_Y_FRAC` and `JEWELRY_GUIDE_BOX_WIDTH_FRAC`/`_ASPECT`/`_CENTER_Y_FRAC` constants defining each box's geometry — all used by `capture.py` |
 | `decoding.py` | Barcode/QR decoding via `pyzbar` |
 | `ocr.py` | OCR via PaddleOCR, plus the row-reconstruction logic that turns its per-text-box detections into printed lines |
 | `parsing.py` | Regex/whitelist field extraction and validation for the diamond tag |

@@ -130,6 +130,18 @@ def test_perspective_correct_jewelry_card_rectifies_a_tilted_card():
     h, w = result.shape[:2]
     assert h > 0 and w > 0
     assert 1.0 <= (w / h) <= 2.2
+    # The input quad is tilted, so a naive (unwarped) crop would leave dark
+    # background triangles in its corners. A correct perspective warp maps
+    # the quad's 4 corners to the output's 4 corners, so every corner of the
+    # warped result should read as card (bright), not background (dark) --
+    # this is what actually distinguishes "warped" from "just cropped".
+    inset = 5
+    corners_to_check = [
+        result[inset, inset], result[inset, w - 1 - inset],
+        result[h - 1 - inset, inset], result[h - 1 - inset, w - 1 - inset],
+    ]
+    for corner_pixel in corners_to_check:
+        assert corner_pixel.mean() > 150  # bright/card-colored, not the bg=30 fill
 
 
 def test_perspective_correct_jewelry_card_raises_when_no_card_present():
