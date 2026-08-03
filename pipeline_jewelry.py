@@ -21,11 +21,11 @@ def process_image(image_bytes: bytes, filename: str) -> dict:
         return {"filename": filename, "accepted": False,
                 "reason": "Could not read image file — it may be corrupt."}
 
-    quality_ok, quality_reason = quality.assess_quality(image, ocr.run_ocr)
+    quality_ok, quality_reason = quality.assess_quality(image, ocr.run_ocr_jewelry)
     if not quality_ok:
         return {"filename": filename, "accepted": False, "reason": quality_reason}
 
-    raw_text = ocr.run_ocr(image)
+    raw_text = ocr.run_ocr_jewelry(image)
     fields = parsing_jewelry.parse_jewelry(raw_text)
     validated = parsing_jewelry.validate_jewelry_fields(fields)
 

@@ -26,7 +26,7 @@ def _png_bytes():
 def test_process_image_returns_jewelry_fields(monkeypatch):
     # Force the quality gate to pass and OCR to return our crafted card text.
     monkeypatch.setattr(quality, "assess_quality", lambda img, fn: (True, None))
-    monkeypatch.setattr(pipeline_jewelry.ocr, "run_ocr", lambda img: _CARD_TEXT)
+    monkeypatch.setattr(pipeline_jewelry.ocr, "run_ocr_jewelry", lambda img: _CARD_TEXT)
     r = pipeline_jewelry.process_image(_png_bytes(), "card.png")
     assert r["accepted"] is True
     assert r["report_no"] == "45J331632607"
