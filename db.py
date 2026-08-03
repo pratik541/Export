@@ -97,3 +97,56 @@ def delete_all() -> bool:
         return True
     except Exception:
         return False
+
+
+JEWELRY_TABLE = "jewelry_scans"
+_JEWELRY_COLUMNS = ("report_no", "shape_cut", "est_weight", "color", "clarity",
+                    "style_no", "needs_review")
+
+
+def save_jewelry_scan(fields: dict, source: str) -> bool:
+    client = get_client()
+    if client is None:
+        return False
+    if not fields.get("report_no"):
+        return False
+    payload = {col: fields.get(col) for col in _JEWELRY_COLUMNS}
+    payload["source"] = source
+    try:
+        client.table(JEWELRY_TABLE).upsert(payload, on_conflict="report_no").execute()
+        return True
+    except Exception:
+        return False
+
+
+def fetch_all_jewelry() -> list:
+    client = get_client()
+    if client is None:
+        return []
+    try:
+        result = client.table(JEWELRY_TABLE).select("*").order("scanned_at", desc=True).execute()
+        return result.data or []
+    except Exception:
+        return []
+
+
+def delete_one_jewelry(report_no: str) -> bool:
+    client = get_client()
+    if client is None:
+        return False
+    try:
+        client.table(JEWELRY_TABLE).delete().eq("report_no", report_no).execute()
+        return True
+    except Exception:
+        return False
+
+
+def delete_all_jewelry() -> bool:
+    client = get_client()
+    if client is None:
+        return False
+    try:
+        client.table(JEWELRY_TABLE).delete().neq("report_no", "__none__").execute()
+        return True
+    except Exception:
+        return False
