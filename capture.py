@@ -31,15 +31,17 @@ def build_item(image_bytes: bytes, filename: str, source: str, item_id: int,
                force_guide_box: bool = False, card_type: str = "diamond") -> dict:
     """Turn raw image bytes into a gallery item: decode, then crop for OCR.
 
-    When force_guide_box is True (Scan page), always crop to the on-screen guide
-    box (imaging.guide_box_crop, sized for card_type) and skip barcode detection
-    — so the crop is identical shot-to-shot and matches the green box the user
-    framed.
+    When force_guide_box is True (Scan page), always crop/rectify via
+    _crop_for_camera (perspective-corrected for jewelry cards, the static
+    on-screen guide box otherwise) and skip barcode detection — so the crop
+    is identical shot-to-shot and matches what the user framed.
 
     Otherwise crop priority is: (1) usable barcode box -> label crop; (2) no
-    usable box but source == "camera" -> guide-box region crop; (3) otherwise
-    (e.g. uploads with no barcode) -> full image. Does NOT run OCR (ocr_result
-    starts None). Raises ValueError on undecodable bytes."""
+    usable box but source == "camera" -> _crop_for_camera as above; (3)
+    otherwise (e.g. uploads with no barcode) -> full image. Does NOT run OCR
+    (ocr_result starts None). Raises ValueError on undecodable bytes, or on a
+    jewelry camera photo where perspective correction can't confidently find
+    the card's edges."""
     image = _decode_image_bytes(image_bytes)
     if image is None:
         raise ValueError("Could not read image file — it may be corrupt.")
