@@ -57,6 +57,9 @@ def _render_result_card(item):
             st.caption("☁ saved to database")
         elif saved is False:
             st.caption("⚠ save failed — kept locally")
+    if r and r.get("raw_ocr_text"):
+        with st.expander("🔧 Raw OCR text (debug)"):
+            st.code(r["raw_ocr_text"])
 
 
 def _render_fix(item):

@@ -43,3 +43,30 @@ def test_missing_labels_give_none_not_crash():
     f = parsing_jewelry.parse_jewelry("nothing useful here")
     assert all(f[k] is None for k in
                ("report_no", "shape_cut", "est_weight", "color", "clarity", "style_no"))
+
+
+def test_parse_handles_missing_colon_separator():
+    # Real photos sometimes drop the ':' column -> value follows the label
+    # directly. This blanked Report No./Shape/Weight in production; must work now.
+    text = "\n".join([
+        "Report No. 45J331632607",
+        "Shape and Cut (1) Oval Brilliant",
+        "Est. Weight 0.56 Carat",
+        "Color E - F",
+        "Clarity VS",
+        "Report number engraved. Style# AFDN352/9",
+    ])
+    f = parsing_jewelry.parse_jewelry(text)
+    assert f["report_no"] == "45J331632607"
+    assert f["shape_cut"] == "(1) Oval Brilliant"
+    assert f["est_weight"] == "0.56 Carat"
+    assert f["color"] == "E - F"
+    assert f["clarity"] == "VS"
+    assert f["style_no"] == "AFDN352/9"
+
+
+def test_style_no_skips_stray_chars_before_the_code():
+    # Regression: production showed Style# == "r"; the code token must be found
+    # even when OCR leaves junk between "Style#" and the actual code.
+    f = parsing_jewelry.parse_jewelry("engraved. Style# r AFDN352/16")
+    assert f["style_no"] == "AFDN352/16"

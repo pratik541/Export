@@ -1,33 +1,35 @@
 """Verbatim label-anchored parser for the IGI Laboratory Grown Diamond Jewelry
 Report card. The card is clean printed text, so each field is the text printed
 after its label, taken EXACTLY as OCR reads it — no normalization, no whitelist
-validation, no fuzzy/guess correction. Only surrounding whitespace and the ':'
-separator are trimmed."""
+validation, no fuzzy/guess correction. Only the leading label + separators are
+stripped; the value is otherwise kept exactly as OCR read it.
+
+We deliberately do NOT require a ':' separator: on real photos OCR sometimes
+drops the colon column, so the value is whatever follows the label on that line
+(colon or not)."""
 import re
 
 _FIELD_KEYS = ("report_no", "shape_cut", "est_weight", "color", "clarity", "style_no")
 
-# Printed label -> field key. Matched case-insensitively at the start of a line's
-# text (ignoring leading punctuation). The value is everything after the first
-# ':' on that line, trimmed.
-_LABELS = [
-    ("report_no", r"report\s*no"),
+# Printed label -> field key. Each regex matches the label at the start of a line
+# (after any leading punctuation) and captures the REST of the line verbatim as
+# the value. Separators between the label and value (spaces, ':', '.', '-') are
+# stripped; the captured value is otherwise untouched.
+_LABEL_PATTERNS = [
+    ("report_no", r"report\s*n[o0]"),
     ("shape_cut", r"shape\s*and\s*cut"),
     ("est_weight", r"est\.?\s*weight"),
     ("color", r"colou?r"),
     ("clarity", r"clarity"),
 ]
+_LABEL_RES = [
+    (key, re.compile(r"^[\s.:\-]*" + pat + r"[\s.:\-]*(.*)$", re.IGNORECASE))
+    for key, pat in _LABEL_PATTERNS
+]
 
-_STYLE_RE = re.compile(r"style#?\s*[:\-]?\s*([^\s]+)", re.IGNORECASE)
-
-
-def _value_after_colon(line: str):
-    """Return the trimmed text after the first ':' on the line, or None if there
-    is no non-empty value."""
-    if ":" not in line:
-        return None
-    value = line.split(":", 1)[1].strip()
-    return value or None
+# Style code: after "Style#", grab the first code-looking token — letters then a
+# digit (e.g. AFDN352/9) — skipping any stray OCR characters in between.
+_STYLE_RE = re.compile(r"style\s*#?[^\n]*?([A-Za-z]{2,}\d[A-Za-z0-9/\-]*)", re.IGNORECASE)
 
 
 def parse_jewelry(raw_text: str) -> dict:
@@ -38,10 +40,14 @@ def parse_jewelry(raw_text: str) -> dict:
         line = raw_line.strip()
         if not line:
             continue
-        lowered = line.lower().lstrip(" .:-")
-        for key, label_pattern in _LABELS:
-            if fields[key] is None and re.match(label_pattern, lowered):
-                fields[key] = _value_after_colon(line)
+        for key, label_re in _LABEL_RES:
+            if fields[key] is not None:
+                continue
+            match = label_re.match(line)
+            if match:
+                value = match.group(1).strip()
+                if value:
+                    fields[key] = value
                 break
 
     style_match = _STYLE_RE.search(raw_text)
