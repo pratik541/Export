@@ -17,6 +17,16 @@ def _is_usable_box(box):
     return box is not None and box[2] > 1 and box[3] > 1
 
 
+def _crop_for_camera(image, card_type):
+    """Crop/rectify a camera photo for OCR. Jewelry cards are perspective-
+    corrected to a flat rectangle (raises ValueError if no confident card
+    quadrilateral is found near the guide box); everything else keeps the
+    static guide-box crop."""
+    if card_type == "jewelry":
+        return imaging.perspective_correct_jewelry_card(image)
+    return imaging.guide_box_crop(image, card_type)
+
+
 def build_item(image_bytes: bytes, filename: str, source: str, item_id: int,
                force_guide_box: bool = False, card_type: str = "diamond") -> dict:
     """Turn raw image bytes into a gallery item: decode, then crop for OCR.
@@ -36,9 +46,10 @@ def build_item(image_bytes: bytes, filename: str, source: str, item_id: int,
 
     crop_box = None
     if force_guide_box:
-        ok, buf = cv2.imencode(".jpg", imaging.guide_box_crop(image, card_type))
+        ok, buf = cv2.imencode(".jpg", _crop_for_camera(image, card_type))
         if ok:
-            cropped_bytes, crop_method = buf.tobytes(), "guide_box"
+            cropped_bytes = buf.tobytes()
+            crop_method = "perspective" if card_type == "jewelry" else "guide_box"
         else:
             cropped_bytes, crop_method = image_bytes, None
     else:
@@ -52,9 +63,10 @@ def build_item(image_bytes: bytes, filename: str, source: str, item_id: int,
             else:
                 cropped_bytes, crop_method, crop_box = image_bytes, None, None
         elif source == "camera":
-            ok, buf = cv2.imencode(".jpg", imaging.guide_box_crop(image, card_type))
+            ok, buf = cv2.imencode(".jpg", _crop_for_camera(image, card_type))
             if ok:
-                cropped_bytes, crop_method = buf.tobytes(), "guide_box"
+                cropped_bytes = buf.tobytes()
+                crop_method = "perspective" if card_type == "jewelry" else "guide_box"
             else:
                 cropped_bytes, crop_method = image_bytes, None
         else:

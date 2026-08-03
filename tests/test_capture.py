@@ -125,12 +125,29 @@ def test_without_force_guide_box_barcode_crop_still_used():
     assert item["crop_method"] == "barcode"      # default behavior preserved
 
 
-def test_build_item_stamps_card_type_and_jewelry_forces_guide_box():
+def test_build_item_stamps_card_type_and_jewelry_uses_perspective_correction(monkeypatch):
+    corrected = np.full((300, 450, 3), 200, dtype=np.uint8)
+    monkeypatch.setattr(capture.imaging, "perspective_correct_jewelry_card",
+                        lambda image: corrected)
     data = (FIXTURES / "sample_tag.jpeg").read_bytes()
     item = capture.build_item(data, "card.png", "camera", 1,
                               force_guide_box=True, card_type="jewelry")
     assert item["card_type"] == "jewelry"
-    assert item["crop_method"] == "guide_box"
+    assert item["crop_method"] == "perspective"
+
+
+def test_build_item_jewelry_raises_when_perspective_correction_fails(monkeypatch):
+    def _raise(image):
+        raise ValueError("Could not detect the card's edges — retake with the "
+                        "card flat, well-lit, and filling the guide box.")
+    monkeypatch.setattr(capture.imaging, "perspective_correct_jewelry_card", _raise)
+    data = _image_bytes()
+    try:
+        capture.build_item(data, "j.jpg", "camera", 1,
+                           force_guide_box=True, card_type="jewelry")
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
 
 
 def test_build_item_defaults_to_diamond_card_type():
