@@ -5,6 +5,9 @@ decodes the barcode (authoritative IGI report number), OCRs the printed grading
 fields (report type, shape, carat, color, clarity), lets you review/correct
 results in an editable table, and exports them to an Excel file.
 
+It also scans a second IGI document type, the Laboratory Grown Diamond Jewelry
+Report card — see "Two card types" below.
+
 Capture and OCR are separate steps. Each uploaded or camera-captured photo is
 auto-cropped to the label around its decoded barcode and dropped into a
 thumbnail gallery — nothing is OCR'd automatically the instant a photo
@@ -55,6 +58,35 @@ planned as a v2 enhancement — Android-first, using the browser's
 `BarcodeDetector` API, falling back to today's one-tap capture where that
 API isn't available. It is **not** part of this release; Scan always
 requires the explicit tap.
+
+## Two card types: diamond tag and jewelry card
+
+Both **Manage** and **Scan** start with a "Card type" radio — **Diamond tag**
+(default) or **Jewelry card** — that governs the rest of that page's flow:
+which fields get read, how the green guide box is shaped, and which store a
+saved scan lands in.
+
+- **Diamond tag** is everything described elsewhere in this README —
+  barcode-anchored crop, `pipeline.py`, the six tracked fields, `tag_scans`.
+- **Jewelry card** targets the IGI Laboratory Grown Diamond Jewelry Report —
+  a printed card with labeled fields (Report No., Shape and Cut, Est. Weight,
+  Color, Clarity, Style#) and no usable barcode. Its guide box is bigger and
+  closer to the card's own proportions (`imaging.JEWELRY_GUIDE_BOX_WIDTH_FRAC`
+  / `_ASPECT` / `_CENTER_Y_FRAC`, vs. the diamond tag's `GUIDE_BOX_*`) so all
+  six labels fit inside the frame — both the crop (`imaging.guide_box_crop`)
+  and the box drawn on the camera preview (the rear-camera component's
+  `box_width_pct`/`box_aspect`/`box_center_y_pct`, or `ui_common.guide_box_css`
+  for the `st.camera_input()` fallback) take a `card_type` argument and stay
+  matched by construction, not just by convention. There's no barcode/QR
+  step for jewelry cards at all — `pipeline_jewelry.process_image` runs the
+  same quality gate and PaddleOCR engine as the diamond pipeline, then reads
+  fields with `parsing_jewelry.py`, a **verbatim, label-anchored parser**:
+  each field is whatever text OCR printed immediately after its label, taken
+  exactly as-is — no normalization, no format/whitelist validation, no
+  fuzzy correction. `needs_review` is set only when a field came back blank,
+  never because a value looked "wrong". Accepted jewelry scans are saved to
+  their own `jewelry_scans` table, separate from `tag_scans` — see "Central
+  database" below.
 
 ## How it works
 
@@ -249,6 +281,34 @@ table afterward, and shows a warning ("Delete had no effect...") if any rows
 are still there, since that's the strongest signal that the delete policy is
 missing.
 
+Jewelry-card scans (see "Two card types" above) are saved to a **separate**
+table, `jewelry_scans`, keyed on `report_no` instead of `igi_report_no`. If
+you want to scan jewelry cards with central storage enabled, also run:
+
+```sql
+create table if not exists jewelry_scans (
+    report_no text primary key,
+    shape_cut text,
+    est_weight text,
+    color text,
+    clarity text,
+    style_no text,
+    needs_review boolean,
+    source text,
+    scanned_at timestamptz default now()
+);
+alter table jewelry_scans enable row level security;
+create policy "anon select" on jewelry_scans for select using (true);
+create policy "anon insert" on jewelry_scans for insert with check (true);
+create policy "anon update" on jewelry_scans for update using (true);
+create policy "anon delete" on jewelry_scans for delete using (true);
+```
+
+Both tables share the same `[supabase]` secrets (below) — there's nothing
+extra to configure beyond creating this second table. Diamond-tag scanning
+works exactly as before whether or not `jewelry_scans` exists; the app only
+touches it when the "Jewelry card" card type is selected.
+
 ### 2. Configure secrets
 
 - **Local setup**: copy `.streamlit/secrets.toml.example` to
@@ -285,6 +345,11 @@ missing.
 - If Supabase isn't configured (no secrets present), the database features
   are simply hidden and the app behaves exactly as it did before this
   feature existed.
+- Jewelry-card scans get their own "Saved jewelry records" section (Manage
+  page), reading `jewelry_scans` and offering the same export-all-to-Excel /
+  per-row delete / type-to-confirm "Delete all" as the diamond-tag "Saved
+  records" section above — just against the separate table, upserted on
+  `report_no` instead of `igi_report_no`.
 
 ## Known limitations
 
