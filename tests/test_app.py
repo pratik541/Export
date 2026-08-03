@@ -161,6 +161,42 @@ def test_saved_records_per_row_delete_calls_delete_one(monkeypatch):
     assert calls == ["809614206"]              # per-row delete really called db.delete_one
 
 
+def test_manage_card_type_radio_exists():
+    # The Manage page must offer a card-type selector so uploads/camera shots
+    # and the results view can be routed to the diamond or jewelry pipeline.
+    at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
+    at.run()
+    assert not at.exception
+    radio = at.radio(key="manage_card_type")
+    assert list(radio.options) == ["Diamond tag", "Jewelry card"]
+
+
+_JEWELRY_ROW = [
+    {"report_no": "J12345", "shape_cut": "ROUND BRILLIANT", "est_weight": "1.20",
+     "color": "F", "clarity": "VS2", "style_no": "RG-100", "needs_review": False,
+     "source": "camera", "scanned_at": "2026-07-25T00:00:00+00:00"},
+]
+
+
+def test_saved_jewelry_records_per_row_delete_calls_delete_one_jewelry(monkeypatch):
+    import db
+    calls = []
+    monkeypatch.setattr(db, "is_enabled", lambda: True)
+    monkeypatch.setattr(db, "fetch_all", lambda: [])
+    monkeypatch.setattr(db, "delete_all", lambda: True)
+    monkeypatch.setattr(db, "delete_one", lambda igi: True)
+    monkeypatch.setattr(db, "fetch_all_jewelry", lambda: list(_JEWELRY_ROW))
+    monkeypatch.setattr(db, "delete_all_jewelry", lambda: True)
+    monkeypatch.setattr(db, "delete_one_jewelry", lambda report_no: calls.append(report_no) or True)
+    at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
+    at.run()
+    assert not at.exception
+    all_sub = " ".join(el.value for el in at.get("subheader")) if at.get("subheader") else ""
+    assert "Saved jewelry records" in all_sub          # section actually rendered
+    at.button(key="del_jewelry_J12345").click().run()
+    assert calls == ["J12345"]                          # per-row delete really called db.delete_one_jewelry
+
+
 def test_delete_all_only_fires_when_DELETE_typed(monkeypatch):
     import db
     n = {"count": 0}

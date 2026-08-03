@@ -18,13 +18,23 @@ import excel_export
 from ui_common import (
     add_image as _add_image, item_by_id as _item_by_id, run_ocr as _run_ocr,
     autosave as _autosave, delete_item as _delete_item, item_status as _item_status,
-    FIELD_LABELS as _FIELD_LABELS, CAMERA_GUIDE_CSS as _CAMERA_GUIDE_CSS,
+    FIELD_LABELS as _FIELD_LABELS, JEWELRY_FIELD_LABELS as _JEWELRY_FIELD_LABELS,
+    guide_box_css as _guide_box_css,
 )
 
 
 def render():
+    st.session_state.setdefault("confirm_delete_all_jewelry", False)
+
     st.title(":material/diamond: IGI diamond report tag scanner")
 
+    # --- Card-type selector ---
+    card_type_choice = st.radio(
+        "Card type", ["Diamond tag", "Jewelry card"],
+        horizontal=True, key="manage_card_type",
+    )
+    card_type = "jewelry" if card_type_choice == "Jewelry card" else "diamond"
+    st.session_state.card_type = card_type
 
     # --- Upload (top) ---
     uploaded_files = st.file_uploader(
@@ -34,7 +44,7 @@ def render():
     if uploaded_files:
         added_any = False
         for uf in uploaded_files:
-            if _add_image(uf.getvalue(), uf.name, "upload") is not None:
+            if _add_image(uf.getvalue(), uf.name, "upload", card_type=card_type) is not None:
                 added_any = True
         if added_any:
             st.toast("Photos added — use 'Run OCR on all' below", icon=":material/upload:")
@@ -45,7 +55,7 @@ def render():
 
     with cam_col:
         st.subheader(":material/photo_camera: Take a photo")
-        st.markdown(_CAMERA_GUIDE_CSS, unsafe_allow_html=True)
+        st.markdown(_guide_box_css(card_type), unsafe_allow_html=True)
         with st.container(key="camera_guide"):
             shot = st.camera_input(
                 "Point at the tag and shoot", resolution="1080p",
@@ -53,7 +63,8 @@ def render():
             )
         st.caption("Fill the box with the tag · hold flat and steady · ~15–30 cm · avoid glare")
         if shot is not None:
-            item = _add_image(shot.getvalue(), f"camera_capture_{st.session_state.next_id}.jpg", "camera")
+            item = _add_image(shot.getvalue(), f"camera_capture_{st.session_state.next_id}.jpg", "camera",
+                              card_type=card_type)
             if item is not None:
                 with st.spinner("Reading tag..."):
                     _run_ocr(item)
@@ -76,9 +87,10 @@ def render():
                 st.markdown(f"**{_item_status(latest)}**")
                 r = latest["ocr_result"]
                 if r and r.get("accepted"):
+                    labels = _JEWELRY_FIELD_LABELS if latest.get("card_type") == "jewelry" else _FIELD_LABELS
                     st.dataframe(
                         pd.DataFrame(
-                            [(lbl, r.get(key) or "—") for key, lbl in _FIELD_LABELS],
+                            [(lbl, r.get(key) or "—") for key, lbl in labels],
                             columns=["Field", "Value"],
                         ),
                         hide_index=True, width="stretch",
@@ -200,8 +212,12 @@ def render():
                             st.rerun()
 
     # --- Results table + export ---
+    # Filter to the currently selected card type so diamond and jewelry rows
+    # (which have different field sets) never mix in one table. Items with no
+    # card_type (e.g. pre-existing diamond items) count as "diamond".
     ocr_rows = [it["ocr_result"] for it in items
-                if it["ocr_result"] is not None and it["ocr_result"].get("accepted")]
+                if it["ocr_result"] is not None and it["ocr_result"].get("accepted")
+                and (it.get("card_type") or "diamond") == card_type]
     if ocr_rows:
         with st.container(border=True):
             st.subheader(":material/table_view: Results")
@@ -277,4 +293,61 @@ def render():
                     rcol.write(f"{igi} · {row.get('shape') or '—'} · {row.get('carat') or '—'} ct")
                     if bcol.button(":material/delete:", key=f"del_saved_{igi}", help="Delete this record"):
                         db.delete_one(igi)
+                        st.rerun()
+
+    # --- Saved jewelry records (shared Supabase store) ---
+    if db.is_enabled():
+        with st.container(border=True):
+            header_col, refresh_col = st.columns([3, 1])
+            header_col.subheader(":material/cloud: Saved jewelry records (shared)")
+            if refresh_col.button(":material/refresh: Refresh", key="refresh_jewelry"):
+                st.rerun()
+            jewelry_rows = db.fetch_all_jewelry()
+            if not jewelry_rows:
+                st.caption("No saved records yet (or couldn't reach the database).")
+            else:
+                jewelry_df = pd.DataFrame(jewelry_rows)
+                st.dataframe(jewelry_df, hide_index=True, width="stretch")
+
+                excel_bytes = excel_export.build_excel_bytes(jewelry_df)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                dl_col, delall_col = st.columns([3, 1])
+                dl_col.download_button(
+                    ":material/download: Download all saved jewelry records as Excel",
+                    data=excel_bytes,
+                    file_name=f"jewelry_scans_all_{timestamp}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_all_jewelry",
+                )
+                if delall_col.button(":material/delete_forever: Delete all", key="delete_all_jewelry"):
+                    st.session_state.confirm_delete_all_jewelry = True
+
+                if st.session_state.confirm_delete_all_jewelry:
+                    st.error("This permanently deletes ALL saved jewelry records for everyone. Type DELETE to confirm.")
+                    typed = st.text_input("Type DELETE", key="delete_all_jewelry_confirm_text", label_visibility="collapsed")
+                    c1, c2 = st.columns(2)
+                    if c1.button("Confirm delete all", type="primary", key="confirm_delete_all_jewelry_btn"):
+                        if typed == "DELETE":
+                            db.delete_all_jewelry()
+                            st.session_state.confirm_delete_all_jewelry = False
+                            st.session_state.pop("delete_all_jewelry_confirm_text", None)
+                            if db.fetch_all_jewelry():  # rows still there -> the delete had no effect
+                                st.warning("Delete had no effect — add the delete policy in Supabase (see README).")
+                            else:
+                                st.toast("All saved jewelry records deleted", icon=":material/delete_forever:")
+                                st.rerun()
+                        else:
+                            st.warning("Type DELETE exactly to confirm.")
+                    if c2.button("Cancel", key="cancel_delete_all_jewelry"):
+                        st.session_state.confirm_delete_all_jewelry = False
+                        st.session_state.pop("delete_all_jewelry_confirm_text", None)
+                        st.rerun()
+
+                st.caption("Delete a single record:")
+                for row in jewelry_rows:
+                    report_no = row.get("report_no", "")
+                    rcol, bcol = st.columns([4, 1])
+                    rcol.write(f"{report_no} · {row.get('shape_cut') or '—'} · {row.get('est_weight') or '—'}")
+                    if bcol.button(":material/delete:", key=f"del_jewelry_{report_no}", help="Delete this record"):
+                        db.delete_one_jewelry(report_no)
                         st.rerun()
