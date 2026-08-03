@@ -46,6 +46,26 @@ CAMERA_GUIDE_CSS = """
 """
 
 
+def guide_box_css(card_type: str) -> str:
+    """Like CAMERA_GUIDE_CSS, but keyed to card_type: jewelry gets a wider,
+    shorter box (92% width, 1.5:1, top 45%); everything else gets the diamond
+    box (78%, 2:1, top 42%). Used by the fallback (non-rear-camera) preview."""
+    if card_type == "jewelry":
+        width, aspect, top = "92%", "1.5 / 1", "45%"
+    else:
+        width, aspect, top = "78%", "2 / 1", "42%"
+    return f"""
+<style>
+.st-key-camera_guide {{ position: relative; }}
+.st-key-camera_guide::after {{
+    content: ""; position: absolute; top: {top}; left: 50%;
+    transform: translate(-50%, -50%); width: {width}; aspect-ratio: {aspect};
+    border: 3px dashed #00e000; border-radius: 8px; pointer-events: none; z-index: 10;
+}}
+</style>
+"""
+
+
 def init_state():
     """Initialize all session-state keys the app relies on (idempotent)."""
     st.session_state.setdefault("gallery_items", [])

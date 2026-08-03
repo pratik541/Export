@@ -32,3 +32,11 @@ def test_guide_box_constants_match_documented_frontend_values():
     assert imaging.GUIDE_BOX_WIDTH_FRAC == 0.78
     assert imaging.GUIDE_BOX_ASPECT == 2.0
     assert imaging.GUIDE_BOX_CENTER_Y_FRAC == 0.42
+
+
+def test_guide_box_css_jewelry_has_jewelry_dimensions():
+    assert "92%" in ui_common.guide_box_css("jewelry")
+
+
+def test_guide_box_css_diamond_has_diamond_dimensions():
+    assert "78%" in ui_common.guide_box_css("diamond")

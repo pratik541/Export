@@ -5,10 +5,17 @@ function sendValue(value) {
 function onRender(event) {
   if (window.rendered) return;
 
-  const { height } = event.detail.args;
+  const { height, box_width_pct, box_aspect, box_center_y_pct } = event.detail.args;
   const video = document.getElementById("video");
   const canvas = document.getElementById("canvas");
   const container = document.getElementById("container");
+
+  const box = document.getElementById("guidebox");
+  if (box) {
+    if (box_width_pct != null) box.style.width = box_width_pct + "%";
+    if (box_aspect != null) box.style.aspectRatio = box_aspect + " / 1";
+    if (box_center_y_pct != null) box.style.top = box_center_y_pct + "%";
+  }
 
   const constraints = { facingMode: "environment", advanced: [{ focusMode: "continuous" }] };
   navigator.mediaDevices

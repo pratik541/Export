@@ -2,8 +2,16 @@
 browser side (getUserMedia, tap capture, the guide box) can't run headless, so
 we test the data-URL decode that turns the component's return value into bytes."""
 import base64
+import inspect
 
 import rear_camera
+
+
+def test_rear_camera_input_box_params_default_to_diamond_box():
+    sig = inspect.signature(rear_camera.rear_camera_input)
+    assert sig.parameters["box_width_pct"].default == 78
+    assert sig.parameters["box_aspect"].default == 2.0
+    assert sig.parameters["box_center_y_pct"].default == 42
 
 
 def test_decode_data_url_returns_png_bytes():
