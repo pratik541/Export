@@ -14,7 +14,7 @@ except Exception:  # noqa: BLE001 - component missing/broken -> basic-camera fal
     _HAS_REAR_CAM = False
 
 
-def _capture_widget():
+def _capture_widget(card_type: str):
     """Show the camera and return captured image bytes, or None. Prefers the
     vendored rear-camera component (rear camera + built-in green guide box);
     falls back to st.camera_input (with the same guide-box overlay) if the
@@ -27,12 +27,15 @@ def _capture_widget():
     key = f"cam_{st.session_state.camera_gen}"
     if _HAS_REAR_CAM and not use_basic:
         try:
+            if card_type == "jewelry":
+                return rear_camera_input(key=f"rear_{key}", box_width_pct=92,
+                                         box_aspect=1.5, box_center_y_pct=45)
             return rear_camera_input(key=f"rear_{key}")  # bytes or None
         except Exception:  # noqa: BLE001
             st.warning("Rear camera unavailable here — turn on 'Use basic camera'.")
             return None
     # Fallback: native camera with the same green guide box as Manage.
-    st.markdown(ui_common.CAMERA_GUIDE_CSS, unsafe_allow_html=True)
+    st.markdown(ui_common.guide_box_css(card_type), unsafe_allow_html=True)
     with st.container(key="camera_guide"):
         shot = st.camera_input("Point at the tag and shoot", key=f"basic_{key}",
                                label_visibility="collapsed")
@@ -41,11 +44,12 @@ def _capture_widget():
 
 
 def _render_result_card(item):
+    labels = ui_common.JEWELRY_FIELD_LABELS if item.get("card_type") == "jewelry" else ui_common.FIELD_LABELS
     st.markdown(f"### {ui_common.item_status(item)}")
     st.image(item["cropped_bytes"], width="stretch")
     r = item.get("ocr_result")
     if r and r.get("accepted"):
-        for field, label in ui_common.FIELD_LABELS:
+        for field, label in labels:
             st.markdown(f"**{label}:** {r.get(field) or '—'}")
     if db.is_enabled():
         saved = item.get("saved_ok")
@@ -58,12 +62,13 @@ def _render_result_card(item):
 def _render_fix(item):
     """Editable fields for a review/failed read. Saving writes the corrected
     values back onto the item's ocr_result and re-runs autosave."""
+    labels = ui_common.JEWELRY_FIELD_LABELS if item.get("card_type") == "jewelry" else ui_common.FIELD_LABELS
     r = item.get("ocr_result") or {}
     with st.expander("✏️ Fix this reading"):
         new_vals = {
             field: st.text_input(label, value=r.get(field) or "",
                                  key=f"fix_{item['id']}_{field}")
-            for field, label in ui_common.FIELD_LABELS
+            for field, label in labels
         }
         if st.button("Save correction", type="primary", key=f"savefix_{item['id']}"):
             updated = dict(r)
@@ -79,10 +84,15 @@ def _render_fix(item):
 def render():
     st.header(":material/photo_camera: Scan a tag")
 
-    data = _capture_widget()
+    card_type_choice = st.radio("Card type", ["Diamond tag", "Jewelry card"],
+                                horizontal=True, key="scan_card_type")
+    card_type = "jewelry" if card_type_choice == "Jewelry card" else "diamond"
+    st.session_state.card_type = card_type
+
+    data = _capture_widget(card_type)
     if data is not None:
         item = ui_common.add_image(data, f"scan_{st.session_state.next_id}.png",
-                                   "camera", force_guide_box=True)
+                                   "camera", force_guide_box=True, card_type=card_type)
         if item is not None:
             with st.spinner("Reading tag..."):
                 ui_common.run_ocr(item)

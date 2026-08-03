@@ -96,3 +96,36 @@ def test_scan_next_resets_camera_key():
     before = at.session_state["camera_gen"]
     at.button(key="scan_next").click().run()
     assert at.session_state["camera_gen"] == before + 1
+
+
+_JEWELRY_OK = {"filename": "j.png", "accepted": True, "needs_review": False,
+              "report_no": "GJ123456", "shape_cut": "ROUND BRILLIANT",
+              "est_weight": "1.20 ct", "color": "F", "clarity": "VS2",
+              "style_no": "ST-9001"}
+
+
+def _jewelry_item(item_id=1, ocr_result=None):
+    png = _png_bytes()
+    return {"id": item_id, "source": "camera", "filename": f"jewelry{item_id}.png",
+            "original_bytes": png, "cropped_bytes": png, "crop_box": None,
+            "crop_method": "guide_box", "auto_cropped": True, "card_type": "jewelry",
+            "ocr_result": ocr_result}
+
+
+def test_card_type_radio_exists():
+    at = AppTest.from_file(HARNESS, default_timeout=120)
+    at.run()
+    assert not at.exception
+    assert any((r.key or "") == "scan_card_type" for r in at.radio)
+
+
+def test_result_card_shows_jewelry_fields_for_jewelry_item():
+    at = AppTest.from_file(HARNESS, default_timeout=120)
+    at.run()
+    _seed(at, _jewelry_item(1, dict(_JEWELRY_OK)))
+    at.run()
+    assert not at.exception
+    md = " ".join(m.value for m in at.markdown)
+    for label in ("Report No.", "Shape & Cut", "Est. Weight", "Color", "Clarity", "Style#"):
+        assert label in md
+    assert "GJ123456" in md

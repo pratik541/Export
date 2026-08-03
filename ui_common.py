@@ -21,6 +21,12 @@ FIELD_LABELS = [
     ("clarity", "Clarity"),
 ]
 
+JEWELRY_FIELD_LABELS = [
+    ("report_no", "Report No."), ("shape_cut", "Shape & Cut"),
+    ("est_weight", "Est. Weight"), ("color", "Color"),
+    ("clarity", "Clarity"), ("style_no", "Style#"),
+]
+
 # Guide box drawn over the camera preview. Its relative numbers (width 78%,
 # vertical center 42%, 2:1 aspect) MUST match imaging.GUIDE_BOX_* so the visible
 # box matches capture.build_item's guide-box crop. Targets the keyed container's
@@ -103,22 +109,30 @@ def item_by_id(item_id):
 
 
 def run_ocr(item):
+    import pipeline_jewelry
     try:
-        item["ocr_result"] = pipeline.process_image(item["cropped_bytes"], item["filename"])
+        if item.get("card_type") == "jewelry":
+            item["ocr_result"] = pipeline_jewelry.process_image(item["cropped_bytes"], item["filename"])
+        else:
+            item["ocr_result"] = pipeline.process_image(item["cropped_bytes"], item["filename"])
     except Exception as exc:  # noqa: BLE001 - one bad image must not kill the batch
         item["ocr_result"] = {"filename": item["filename"], "accepted": False,
                               "reason": f"Processing error: {exc}"}
 
 
 def autosave(item):
-    """Auto-save an accepted, IGI-bearing scan to Supabase if configured.
+    """Auto-save an accepted, key-bearing scan to Supabase if configured.
     Records the save outcome ON THE ITEM (item["saved_ok"]: True/False, or absent
     if saving didn't apply) so the indicator reflects that item, not a stale
-    session-global flag."""
+    session-global flag. Routes to the jewelry or diamond table by card_type."""
     r = item.get("ocr_result")
-    if not (db.is_enabled() and r and r.get("accepted") and r.get("igi_report_no")):
+    if not (db.is_enabled() and r and r.get("accepted")):
         return
-    item["saved_ok"] = db.save_scan(r, item["source"])
+    if item.get("card_type") == "jewelry":
+        if r.get("report_no"):
+            item["saved_ok"] = db.save_jewelry_scan(r, item["source"])
+    elif r.get("igi_report_no"):
+        item["saved_ok"] = db.save_scan(r, item["source"])
 
 
 def delete_item(item_id):
