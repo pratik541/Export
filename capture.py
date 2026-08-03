@@ -18,12 +18,13 @@ def _is_usable_box(box):
 
 
 def build_item(image_bytes: bytes, filename: str, source: str, item_id: int,
-               force_guide_box: bool = False) -> dict:
+               force_guide_box: bool = False, card_type: str = "diamond") -> dict:
     """Turn raw image bytes into a gallery item: decode, then crop for OCR.
 
     When force_guide_box is True (Scan page), always crop to the on-screen guide
-    box (imaging.center_box_crop) and skip barcode detection — so the crop is
-    identical shot-to-shot and matches the green box the user framed.
+    box (imaging.guide_box_crop, sized for card_type) and skip barcode detection
+    — so the crop is identical shot-to-shot and matches the green box the user
+    framed.
 
     Otherwise crop priority is: (1) usable barcode box -> label crop; (2) no
     usable box but source == "camera" -> guide-box region crop; (3) otherwise
@@ -35,7 +36,7 @@ def build_item(image_bytes: bytes, filename: str, source: str, item_id: int,
 
     crop_box = None
     if force_guide_box:
-        ok, buf = cv2.imencode(".jpg", imaging.center_box_crop(image))
+        ok, buf = cv2.imencode(".jpg", imaging.guide_box_crop(image, card_type))
         if ok:
             cropped_bytes, crop_method = buf.tobytes(), "guide_box"
         else:
@@ -51,7 +52,7 @@ def build_item(image_bytes: bytes, filename: str, source: str, item_id: int,
             else:
                 cropped_bytes, crop_method, crop_box = image_bytes, None, None
         elif source == "camera":
-            ok, buf = cv2.imencode(".jpg", imaging.center_box_crop(image))
+            ok, buf = cv2.imencode(".jpg", imaging.guide_box_crop(image, card_type))
             if ok:
                 cropped_bytes, crop_method = buf.tobytes(), "guide_box"
             else:
@@ -68,5 +69,6 @@ def build_item(image_bytes: bytes, filename: str, source: str, item_id: int,
         "crop_box": crop_box,
         "crop_method": crop_method,
         "auto_cropped": crop_method is not None,
+        "card_type": card_type,
         "ocr_result": None,
     }

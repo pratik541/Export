@@ -123,3 +123,17 @@ def test_without_force_guide_box_barcode_crop_still_used():
     data = _fixture_with_usable_barcode()
     item = capture.build_item(data, "sample_tag.jpeg", "camera", 1)
     assert item["crop_method"] == "barcode"      # default behavior preserved
+
+
+def test_build_item_stamps_card_type_and_jewelry_forces_guide_box():
+    data = (FIXTURES / "sample_tag.jpeg").read_bytes()
+    item = capture.build_item(data, "card.png", "camera", 1,
+                              force_guide_box=True, card_type="jewelry")
+    assert item["card_type"] == "jewelry"
+    assert item["crop_method"] == "guide_box"
+
+
+def test_build_item_defaults_to_diamond_card_type():
+    data = (FIXTURES / "sample_tag.jpeg").read_bytes()
+    item = capture.build_item(data, "t.jpeg", "upload", 1)
+    assert item["card_type"] == "diamond"

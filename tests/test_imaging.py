@@ -92,3 +92,21 @@ def test_center_box_crop_returns_a_copy_not_a_view():
     crop = imaging.center_box_crop(image)
     crop[0, 0] = 255
     assert image[0, 0].tolist() == [0, 0, 0]  # original untouched
+
+
+def test_jewelry_guide_box_is_wider_and_less_wide_aspect_than_diamond():
+    assert imaging.JEWELRY_GUIDE_BOX_WIDTH_FRAC == 0.92
+    assert imaging.JEWELRY_GUIDE_BOX_ASPECT == 1.5
+    assert imaging.JEWELRY_GUIDE_BOX_CENTER_Y_FRAC == 0.45
+
+
+def test_guide_box_crop_diamond_matches_default_center_box_crop():
+    img = np.full((400, 600, 3), 128, dtype=np.uint8)
+    assert imaging.guide_box_crop(img, "diamond").shape == imaging.center_box_crop(img).shape
+
+
+def test_guide_box_crop_jewelry_is_taller_than_diamond():
+    img = np.full((400, 600, 3), 128, dtype=np.uint8)
+    d = imaging.guide_box_crop(img, "diamond")
+    j = imaging.guide_box_crop(img, "jewelry")
+    assert j.shape[0] > d.shape[0]   # jewelry box captures more vertical area

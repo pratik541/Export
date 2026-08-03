@@ -58,7 +58,8 @@ def init_state():
     st.session_state.setdefault("camera_gen", 0)     # bump to reset the camera
 
 
-def add_image(data: bytes, filename: str, source: str, force_guide_box: bool = False):
+def add_image(data: bytes, filename: str, source: str, force_guide_box: bool = False,
+             card_type: str = "diamond"):
     """Add one image as a gallery item. Returns the new item, or None if it was
     a duplicate / unreadable. force_guide_box forces a guide-box crop (Scan)."""
     digest = hashlib.md5(data).hexdigest()
@@ -66,7 +67,7 @@ def add_image(data: bytes, filename: str, source: str, force_guide_box: bool = F
         return None
     try:
         item = capture.build_item(data, filename, source, st.session_state.next_id,
-                                  force_guide_box=force_guide_box)
+                                  force_guide_box=force_guide_box, card_type=card_type)
     except ValueError as exc:
         st.warning(f"{filename}: {exc}")
         st.session_state.seen_hashes.add(digest)

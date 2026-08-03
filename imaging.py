@@ -60,16 +60,24 @@ GUIDE_BOX_WIDTH_FRAC = 0.78       # box width as a fraction of image width
 GUIDE_BOX_ASPECT = 2.0            # width : height
 GUIDE_BOX_CENTER_Y_FRAC = 0.42    # box vertical center as a fraction of image height
 
+# Jewelry-card guide box: bigger and closer to the card's shape so all labels
+# (Report No. at top ... Style# at bottom) fit inside. MUST match the drawn box
+# in rear_camera/frontend + ui_common.guide_box_css("jewelry"). Starting values.
+JEWELRY_GUIDE_BOX_WIDTH_FRAC = 0.92
+JEWELRY_GUIDE_BOX_ASPECT = 1.5
+JEWELRY_GUIDE_BOX_CENTER_Y_FRAC = 0.45
 
-def center_box_crop(image):
-    """Crop to the guide-box region: a centered landscape rectangle matching the
-    on-screen camera guide box. Used as the crop fallback for camera captures
-    when no barcode is found. Clamped to image bounds; returns a copy."""
+
+def center_box_crop(image, *, width_frac=GUIDE_BOX_WIDTH_FRAC,
+                    aspect=GUIDE_BOX_ASPECT, center_y_frac=GUIDE_BOX_CENTER_Y_FRAC):
+    """Crop to a centered landscape rectangle (the on-screen guide box). Box
+    geometry is parameterized so different card types can use different boxes;
+    defaults reproduce the diamond-tag box exactly. Clamped; returns a copy."""
     h, w = image.shape[:2]
-    box_w = GUIDE_BOX_WIDTH_FRAC * w
-    box_h = box_w / GUIDE_BOX_ASPECT
+    box_w = width_frac * w
+    box_h = box_w / aspect
     cx = w / 2.0
-    cy = GUIDE_BOX_CENTER_Y_FRAC * h
+    cy = center_y_frac * h
     left = int(round(cx - box_w / 2))
     right = int(round(cx + box_w / 2))
     top = int(round(cy - box_h / 2))
@@ -79,3 +87,12 @@ def center_box_crop(image):
     top = max(0, min(top, h - 1))
     bottom = max(top + 1, min(bottom, h))
     return image[top:bottom, left:right].copy()
+
+
+def guide_box_crop(image, card_type):
+    """center_box_crop with the box geometry for the given card type."""
+    if card_type == "jewelry":
+        return center_box_crop(image, width_frac=JEWELRY_GUIDE_BOX_WIDTH_FRAC,
+                               aspect=JEWELRY_GUIDE_BOX_ASPECT,
+                               center_y_frac=JEWELRY_GUIDE_BOX_CENTER_Y_FRAC)
+    return center_box_crop(image)
