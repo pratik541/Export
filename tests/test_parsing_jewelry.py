@@ -70,3 +70,31 @@ def test_style_no_skips_stray_chars_before_the_code():
     # even when OCR leaves junk between "Style#" and the actual code.
     f = parsing_jewelry.parse_jewelry("engraved. Style# r AFDN352/16")
     assert f["style_no"] == "AFDN352/16"
+
+
+# The ACTUAL PaddleOCR output for a real jewelry card (columns merged/jumbled:
+# Report No. value stranded on the Description line, Color+Clarity collapsed onto
+# one line, "Stylo#" misread). This is the true regression that broke production.
+REAL_OCR = "\n".join([
+    "GEMOLOGICAL INTERNATIONAL LABORATORY GROWN DIAMOND JEWELRY REPORT",
+    "INSTITUTE",
+    "Description One (1) Laboratory Grown Diamond Report No. : One Siver Pendant "
+    "with Chaln. weighing In total 2.06 .. contalning ：45J331632607",
+    "Shape and Cut : (1) Oval Briliant",
+    "Est. Weight : 0.56 Carat",
+    "Clarity Color : VS :E-F",
+    "Weights purported by the client, Report number engraved. Stylo# AFDN352/9 "
+    "Comments : Grading & ldentification as mounting permits, Description and",
+    "122500 209",
+])
+
+
+def test_parses_real_jumbled_ocr_output():
+    f = parsing_jewelry.parse_jewelry(REAL_OCR)
+    assert f["report_no"] == "45J331632607"
+    assert f["shape_cut"] == "(1) Oval Briliant"
+    assert f["est_weight"] == "0.56 Carat"
+    assert f["color"] == "E-F"
+    assert f["clarity"] == "VS"
+    assert f["style_no"] == "AFDN352/9"
+    assert parsing_jewelry.validate_jewelry_fields(f)["needs_review"] is False

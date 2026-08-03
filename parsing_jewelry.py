@@ -1,58 +1,65 @@
-"""Verbatim label-anchored parser for the IGI Laboratory Grown Diamond Jewelry
-Report card. The card is clean printed text, so each field is the text printed
-after its label, taken EXACTLY as OCR reads it — no normalization, no whitelist
-validation, no fuzzy/guess correction. Only the leading label + separators are
-stripped; the value is otherwise kept exactly as OCR read it.
+"""Parser for the IGI Laboratory Grown Diamond Jewelry Report card.
 
-We deliberately do NOT require a ':' separator: on real photos OCR sometimes
-drops the colon column, so the value is whatever follows the label on that line
-(colon or not)."""
+Real phone photos of this card do NOT OCR as clean "Label : value" lines. The
+two-column layout makes PaddleOCR merge labels and values across columns and
+rows: the Report No. value lands at the end of the Description line, and Color's
+and Clarity's values collapse onto a single line ("Clarity Color : VS :E-F").
+So pure "text after the label" parsing cannot separate them.
+
+Instead we LOCATE each field's value by anchoring on its label where the line is
+clean (Shape and Cut, Est. Weight) and by the value's own distinctive shape
+where the columns are jumbled (report number, colour range, clarity grade, style
+code). We only LOCATE the value — the stored string is exactly what OCR produced
+(no reformatting, no whitelist correction, no guessing at the characters)."""
 import re
 
 _FIELD_KEYS = ("report_no", "shape_cut", "est_weight", "color", "clarity", "style_no")
 
-# Printed label -> field key. Each regex matches the label at the start of a line
-# (after any leading punctuation) and captures the REST of the line verbatim as
-# the value. Separators between the label and value (spaces, ':', '.', '-') are
-# stripped; the captured value is otherwise untouched.
-_LABEL_PATTERNS = [
-    ("report_no", r"report\s*n[o0]"),
-    ("shape_cut", r"shape\s*and\s*cut"),
-    ("est_weight", r"est\.?\s*weight"),
-    ("color", r"colou?r"),
-    ("clarity", r"clarity"),
-]
-_LABEL_RES = [
-    (key, re.compile(r"^[\s.:\-]*" + pat + r"[\s.:\-]*(.*)$", re.IGNORECASE))
-    for key, pat in _LABEL_PATTERNS
-]
+# Report number: a 10-14 char alphanumeric run containing at least one digit
+# (e.g. 45J331632607). Prefer one shortly after the "Report No" label; otherwise
+# the first such run anywhere in the text.
+_REPORTNO_TOKEN = r"\b(?=[0-9A-Za-z]*\d)[0-9A-Za-z]{10,14}\b"
+_REPORTNO_ANCHORED = re.compile(
+    r"report\s*n[o0][\s\S]{0,140}?(" + _REPORTNO_TOKEN + r")", re.IGNORECASE
+)
+_REPORTNO_GLOBAL = re.compile("(" + _REPORTNO_TOKEN + ")")
 
-# Style code: after "Style#", grab the first code-looking token — letters then a
-# digit (e.g. AFDN352/9) — skipping any stray OCR characters in between.
-_STYLE_RE = re.compile(r"style\s*#?[^\n]*?([A-Za-z]{2,}\d[A-Za-z0-9/\-]*)", re.IGNORECASE)
+# Clean labelled lines: capture the rest of the line after the label (the ':' is
+# optional because OCR sometimes drops it).
+_SHAPE_RE = re.compile(r"shape\s*and\s*cut\s*[:.\-]*\s*([^\n]+)", re.IGNORECASE)
+_WEIGHT_LABEL_RE = re.compile(r"est\.?\s*weight\s*[:.\-]*\s*([^\n]+)", re.IGNORECASE)
+# Prefer the carat value pattern (avoids grabbing the pendant's total gram weight
+# from the Description line, which is not followed by "carat").
+_WEIGHT_PATTERN_RE = re.compile(r"(\d+\.\d{1,2}\s*carat)", re.IGNORECASE)
+
+# Colour: a diamond colour grade range within D..Z (e.g. "E - F" or "E-F").
+_COLOR_RE = re.compile(r"([D-Z]\s*[-–]\s*[D-Z])")
+# Clarity: a standard grade token (longest alternatives first so VVS beats VS).
+_CLARITY_RE = re.compile(r"\b(FL|IF|VVS[12]?|VS[12]?|SI[123]?|I[123])\b", re.IGNORECASE)
+# Style code after a "Styl..." label (tolerates the "Stylo#" OCR misread); the
+# code looks like AFDN352/9 — letters then a digit — with any stray chars skipped.
+_STYLE_RE = re.compile(
+    r"styl\w*\s*#?[^\n]*?([A-Za-z]{2,}\d[A-Za-z0-9/\-]*)", re.IGNORECASE
+)
+
+
+def _first_group(regex, text):
+    match = regex.search(text)
+    return match.group(1).strip() if match else None
 
 
 def parse_jewelry(raw_text: str) -> dict:
-    """Extract the six jewelry-card fields verbatim. Missing fields are None."""
+    """Extract the six jewelry-card fields (verbatim values). Missing fields None."""
     fields = {key: None for key in _FIELD_KEYS}
 
-    for raw_line in raw_text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        for key, label_re in _LABEL_RES:
-            if fields[key] is not None:
-                continue
-            match = label_re.match(line)
-            if match:
-                value = match.group(1).strip()
-                if value:
-                    fields[key] = value
-                break
-
-    style_match = _STYLE_RE.search(raw_text)
-    if style_match:
-        fields["style_no"] = style_match.group(1)
+    fields["report_no"] = (_first_group(_REPORTNO_ANCHORED, raw_text)
+                           or _first_group(_REPORTNO_GLOBAL, raw_text))
+    fields["shape_cut"] = _first_group(_SHAPE_RE, raw_text)
+    fields["est_weight"] = (_first_group(_WEIGHT_PATTERN_RE, raw_text)
+                            or _first_group(_WEIGHT_LABEL_RE, raw_text))
+    fields["color"] = _first_group(_COLOR_RE, raw_text)
+    fields["clarity"] = _first_group(_CLARITY_RE, raw_text)
+    fields["style_no"] = _first_group(_STYLE_RE, raw_text)
 
     return fields
 
