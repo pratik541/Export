@@ -73,6 +73,15 @@ def _looks_like_color_range(value):
     return bool(value) and bool(re.search(r"[A-Za-z]\s*[-–]\s*[A-Za-z]", value))
 
 
+# Colour value's own shape, searched globally: a colour grade range is a
+# standalone single letter, a dash, and another standalone single letter (the
+# \b...\b keeps this from matching letters inside an ordinary hyphenated word).
+# This has been observed zippered against EITHER "Clarity" or "Est. Weight"
+# depending on the scan, so locating it by its own shape -- rather than by
+# whichever label it happens to be paired with that time -- is what's reliable.
+_COLOR_SHAPE_RE = re.compile(r"(\b[A-Za-z]\s*[-–]\s*[A-Za-z]\b)")
+
+
 def _extract_clarity_and_color(raw_text: str):
     """The card zippers these onto one line: 'Clarity Color : <v1> :<v2>'. Which
     of v1/v2 is the colour value is decided by SHAPE (colour is a letter-dash-
@@ -151,7 +160,8 @@ def parse_jewelry(raw_text: str) -> dict:
 
     clarity, color = _extract_clarity_and_color(raw_text)
     fields["clarity"] = clarity or _extract_after_label(raw_text, r"clarity")
-    fields["color"] = color or _extract_after_label(raw_text, r"colou?r")
+    fields["color"] = (_first_group(_COLOR_SHAPE_RE, raw_text)
+                       or color or _extract_after_label(raw_text, r"colou?r"))
 
     fields["style_no"] = (_first_group(_STYLE_ANCHORED, raw_text)
                           or _first_group(_STYLE_GLOBAL, raw_text))

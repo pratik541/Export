@@ -159,3 +159,35 @@ def test_parses_third_real_ocr_pass_with_flipped_value_order_and_double_misreads
     assert f["color"] == "t-F"                 # verbatim; located by its dash shape, not order
     assert f["style_no"] == "AFDN352/8"
     assert parsing_jewelry.validate_jewelry_fields(f)["needs_review"] is False
+
+
+# A FOURTH real OCR pass: this time COLOR is zippered with "Est, Weight" instead
+# of with "Clarity" ("Est, Weight Color : 0.56 Carat :E-F"), while "Clarity"
+# ends up zippered with the unrelated "Comments" label instead ("Clarity
+# Comments ... Stylet AFDN352/9 : VS : Grading ..."). This is the true
+# regression that broke a fourth time: color's value was located by "whichever
+# label it's zippered against" rather than by its own shape, so when Color
+# paired with a NUMERIC field instead of Clarity, the numeric value ("0.56
+# Carat") was grabbed instead of "E-F".
+REAL_OCR_4 = "\n".join([
+    "INTERNATIONAL GEMOLOGICAL LABORATORY GROWN DIAMOND JEWELRY REPORT",
+    "INSTITUTE",
+    "Report No. One (1) Laboratory Grown Diamond Description : One Slver Pendant "
+    "with Chain, welghing in total 2.06 g.. containing ：45J331632607",
+    "Shape and Cut : (1) Oval Briliant",
+    "Est, Weight Color : 0.56 Carat :E-F",
+    "Clarity Comments Weights purported by the cllent, Report number engraved. "
+    "Stylet AFDN352/9 : VS : Grading & ldentification as mounting permits. "
+    "Description and",
+])
+
+
+def test_parses_fourth_real_ocr_pass_with_color_zippered_to_weight_instead_of_clarity():
+    f = parsing_jewelry.parse_jewelry(REAL_OCR_4)
+    assert f["report_no"] == "45J331632607"
+    assert f["shape_cut"] == "(1) Oval Briliant"
+    assert f["est_weight"] == "0.56 Carat"
+    assert f["color"] == "E-F"    # NOT "0.56 Carat" (color was zippered with weight, not clarity)
+    assert f["clarity"] == "VS"   # zippered with "Comments" this time, not "Color"
+    assert f["style_no"] == "AFDN352/9"
+    assert parsing_jewelry.validate_jewelry_fields(f)["needs_review"] is False
