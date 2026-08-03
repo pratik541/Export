@@ -95,3 +95,51 @@ def test_get_reader_returns_a_cached_singleton(monkeypatch):
 
     assert first is second
     assert len(created) == 1
+
+
+def test_group_into_lines_by_overlap_merges_boxes_that_actually_overlap_vertically():
+    detections = [
+        ([[0, 0], [50, 0], [50, 20], [0, 20]], "E", 0.9),
+        ([[60, 2], [140, 2], [140, 22], [60, 22]], "VS1", 0.9),
+    ]
+    assert ocr.group_into_lines_by_overlap(detections) == "E VS1"
+
+
+def test_group_into_lines_by_overlap_keeps_far_apart_rows_separate():
+    detections = [
+        ([[0, 0], [50, 0], [50, 20], [0, 20]], "REPORT", 0.9),
+        ([[0, 100], [50, 100], [50, 120], [0, 120]], "CVD", 0.9),
+    ]
+    assert ocr.group_into_lines_by_overlap(detections) == "REPORT\nCVD"
+
+
+def test_group_into_lines_by_overlap_orders_boxes_left_to_right_within_a_row():
+    detections = [
+        ([[100, 0], [150, 0], [150, 20], [100, 20]], "VS1", 0.9),
+        ([[0, 0], [50, 0], [50, 20], [0, 20]], "E", 0.9),
+    ]
+    assert ocr.group_into_lines_by_overlap(detections) == "E VS1"
+
+
+def test_group_into_lines_by_overlap_keeps_close_but_non_overlapping_rows_separate():
+    detections = [
+        ([[0, 0], [50, 0], [50, 20], [0, 20]], "REPORT", 0.9),
+        ([[0, 20], [50, 20], [50, 30], [0, 30]], "TWO", 0.9),
+    ]
+    # Centers are only 15px apart (10 vs 25) -- group_into_lines's flat 15px
+    # tolerance merges these into one scrambled line. Their y-extents
+    # ([0,20] vs [20,30]) don't overlap at all, so overlap-based grouping
+    # correctly keeps them as separate rows. This is the exact mechanism
+    # behind the real "Clarity Color : VS :E-F" zippering seen in production.
+    assert ocr.group_into_lines(detections) == "REPORT TWO"
+    assert ocr.group_into_lines_by_overlap(detections) == "REPORT\nTWO"
+
+
+def test_run_ocr_jewelry_uses_overlap_based_grouping(monkeypatch):
+    fake_reader = _FakeReader(_detection_result([
+        ([[0, 0], [50, 0], [50, 20], [0, 20]], "REPORT", 0.9),
+        ([[0, 20], [50, 20], [50, 30], [0, 30]], "TWO", 0.9),
+    ]))
+    monkeypatch.setattr(ocr, "get_reader", lambda: fake_reader)
+    result = ocr.run_ocr_jewelry(np.zeros((100, 100, 3), dtype=np.uint8))
+    assert result == "REPORT\nTWO"

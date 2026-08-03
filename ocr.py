@@ -73,9 +73,55 @@ def group_into_lines(detections, y_tolerance=15) -> str:
     return "\n".join(lines)
 
 
-def run_ocr(image) -> str:
+def _detect(image):
+    """Run PaddleOCR and return the raw (box, text, score) detections, shared
+    by both line-reconstruction strategies below."""
     if image.ndim == 2:
         image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
     result = get_reader().predict(image)
-    detections = zip(result[0]["rec_polys"], result[0]["rec_texts"], result[0]["rec_scores"])
-    return group_into_lines(list(detections))
+    return list(zip(result[0]["rec_polys"], result[0]["rec_texts"], result[0]["rec_scores"]))
+
+
+def run_ocr(image) -> str:
+    return group_into_lines(_detect(image))
+
+
+def run_ocr_jewelry(image) -> str:
+    """Same as run_ocr, but reconstructs lines by vertical-extent overlap
+    instead of center-distance -- see group_into_lines_by_overlap."""
+    return group_into_lines_by_overlap(_detect(image))
+
+
+def group_into_lines_by_overlap(detections, min_overlap_frac=0.5) -> str:
+    """Like group_into_lines, but two fragments are the same printed line only
+    if their vertical EXTENTS substantially overlap, not just their centers.
+    The jewelry card has closely-stacked rows (e.g. "Clarity: VS" directly
+    above "Color: E-F") that a flat distance-to-center test merges into one
+    scrambled line; comparing actual top/bottom spans keeps them separate."""
+    items = []
+    for box, text, _score in detections:
+        ys = [point[1] for point in box]
+        xs = [point[0] for point in box]
+        items.append((min(ys), max(ys), min(xs), text))
+    items.sort(key=lambda item: item[0])
+
+    lines = []
+    current_line = []
+    band_top = band_bottom = None
+    for y_top, y_bottom, x, text in items:
+        if band_top is not None:
+            overlap = min(y_bottom, band_bottom) - max(y_top, band_top)
+            height = min(y_bottom - y_top, band_bottom - band_top)
+            same_line = height > 0 and (overlap / height) >= min_overlap_frac
+        else:
+            same_line = True
+        if same_line:
+            current_line.append((x, text))
+            band_top = y_top if band_top is None else min(band_top, y_top)
+            band_bottom = y_bottom if band_bottom is None else max(band_bottom, y_bottom)
+        else:
+            lines.append(" ".join(t for _, t in sorted(current_line)))
+            current_line, band_top, band_bottom = [(x, text)], y_top, y_bottom
+    if current_line:
+        lines.append(" ".join(t for _, t in sorted(current_line)))
+    return "\n".join(lines)
