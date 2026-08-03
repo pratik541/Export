@@ -3,12 +3,7 @@ function sendValue(value) {
 }
 
 function onRender(event) {
-  if (window.rendered) return;
-
   const { height, box_width_pct, box_aspect, box_center_y_pct } = event.detail.args;
-  const video = document.getElementById("video");
-  const canvas = document.getElementById("canvas");
-  const container = document.getElementById("container");
 
   const box = document.getElementById("guidebox");
   if (box) {
@@ -16,6 +11,12 @@ function onRender(event) {
     if (box_aspect != null) box.style.aspectRatio = box_aspect + " / 1";
     if (box_center_y_pct != null) box.style.top = box_center_y_pct + "%";
   }
+
+  if (window.rendered) return;
+
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("canvas");
+  const container = document.getElementById("container");
 
   const constraints = { facingMode: "environment", advanced: [{ focusMode: "continuous" }] };
   navigator.mediaDevices
