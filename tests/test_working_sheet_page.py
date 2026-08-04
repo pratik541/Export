@@ -59,3 +59,37 @@ def test_generate_button_builds_rows_and_shows_them_in_a_table(monkeypatch):
 def st_session_state_has_row_with_description(at, description):
     rows = at.session_state["working_sheet_rows"]
     return any(row["Item Description"] == description for row in rows)
+
+
+def test_invoice_parse_failure_shows_a_friendly_error_not_a_raw_traceback(monkeypatch):
+    import working_sheet.invoice as invoice_module
+    import working_sheet.packing_list as packing_list_module
+
+    monkeypatch.setattr(
+        packing_list_module, "parse_packing_list",
+        lambda b: [{
+            "number": 1, "ritc": "12345678", "description": "DESC",
+            "gross_wt": 50.0, "net_wt": 45.0, "stone_wt": 0.5,
+            "fob_value": 600.0, "unit_price": 12.0, "standard_qty": 0.05,
+        }],
+    )
+    monkeypatch.setattr(
+        invoice_module, "parse_invoice",
+        lambda b: (_ for _ in ()).throw(RuntimeError("corrupt PDF")),
+    )
+
+    at = AppTest.from_file("tests/harness_working_sheet.py", default_timeout=120)
+    at.run()
+    at.file_uploader(key="working_sheet_pl_upload").upload(
+        "pl.xlsx", b"fake-xlsx-bytes",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    at.file_uploader(key="working_sheet_inv_upload").upload(
+        "invoice.pdf", b"fake-pdf-bytes", "application/pdf",
+    )
+    at.run()
+    at.button(key="working_sheet_generate").click().run()
+
+    assert not at.exception
+    all_errors = " ".join(e.value for e in at.error) if at.get("error") else ""
+    assert "Could not read the uploaded files" in all_errors

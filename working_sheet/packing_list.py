@@ -93,6 +93,11 @@ def _finalize_category(current: dict) -> dict:
             f"Category [{current['number']:02d}] \"{current['header']}\" "
             "has no identifiable subtotal row."
         )
+    if current["ritc"] is None or not current["ritc"].isdigit():
+        raise PackingListParseError(
+            f"Category [{current['number']:02d}] \"{current['header']}\" "
+            f"has an invalid RITC value: {current['ritc']!r}."
+        )
     row = current["subtotal_row"]
     raw_values = {
         "gross_wt": row[COL_J_GROSS_WT].value,

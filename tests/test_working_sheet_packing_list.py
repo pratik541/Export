@@ -128,3 +128,11 @@ def test_unparseable_piece_breakdown_raises_parse_error():
 
     with pytest.raises(packing_list.PackingListParseError, match=r"\[01\]"):
         packing_list.parse_packing_list(_write(cells))
+
+
+def test_missing_ritc_raises_parse_error():
+    cells = dict(_TWO_CATEGORY_CELLS)
+    del cells[(9, "G")]
+
+    with pytest.raises(packing_list.PackingListParseError, match=r"\[01\]"):
+        packing_list.parse_packing_list(_write(cells))
