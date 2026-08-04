@@ -233,6 +233,42 @@ def test_parses_fifth_real_ocr_pass_with_misread_clarity_label_and_plural_carats
     assert parsing_jewelry.validate_jewelry_fields(f)["needs_review"] is False
 
 
+# A SIXTH real OCR pass, of yet another physical card (a multi-stone ring, 23
+# round brilliants): the Comments field's LABEL was lost, and its boilerplate
+# VALUE text got zippered onto the Clarity line, landing between Clarity's own
+# colon and the real clarity value's colon: "Clarity : Grading &
+# Identification as mounting permits. Descripticn : VVs-VS". The fuzzy-label
+# fallback used to take the segment between the first two colons (the shape
+# built for a *different* zippering pattern -- two labels' worth of text
+# before all the values), grabbing the Comments boilerplate instead of the
+# real value. Also note the OCR case noise in the trade range itself
+# ("VVs-VS", not "VVS-VS") -- must come back exactly as OCR produced it.
+REAL_OCR_6 = "\n".join([
+    "INTERNATIONAL GEMOLOGICAL LABORATORY GROWN DIAMOND JEWELRY REPORT",
+    "INSTITUTE",
+    "Description Report No. : One Slver Ring. weighing in total 2.74 g.. "
+    "containing Twenty :38J945252606",
+    "Three (23) Laboratory Grown Diamonds",
+    "Shape and Cut : (23) Round Brillant",
+    "Tot. Est. Weight : 2.50 Carats",
+    "Color :E-F",
+    "Clarity : Grading & Identification as mounting permits. Descripticn : VVs-VS",
+    "and Weights purported by the client. Report number engraved. Styles Comments",
+    "AFDRB201/110",
+])
+
+
+def test_parses_sixth_real_ocr_pass_with_comments_blob_zippered_onto_clarity_line():
+    f = parsing_jewelry.parse_jewelry(REAL_OCR_6)
+    assert f["report_no"] == "38J945252606"
+    assert f["shape_cut"] == "(23) Round Brillant"
+    assert f["est_weight"] == "2.50 Carats"
+    assert f["color"] == "E-F"
+    assert f["clarity"] == "VVs-VS"  # NOT the Comments boilerplate text; verbatim case noise kept
+    assert f["style_no"] == "AFDRB201/110"
+    assert parsing_jewelry.validate_jewelry_fields(f)["needs_review"] is False
+
+
 # Parcel/melee-grading cards report a TRADE RANGE for clarity instead of a
 # single grade (e.g. "VVS-VS", not just "VS"). _looks_like_color_range used a
 # plain substring search, so a trade range like "VVS-VS" or "SI-I" hides a

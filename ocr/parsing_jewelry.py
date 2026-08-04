@@ -93,13 +93,36 @@ def _fuzzy_label_span(line: str, label: str, threshold: float = 80):
     return best_span
 
 
+_CLARITY_GRADE_TOKEN = r"(?:FL|IF|VVS[12]?|VS[12]?|SI[123]?|I[123])"
+_CLARITY_SHAPE_RE = re.compile(
+    r"^\s*" + _CLARITY_GRADE_TOKEN + r"(?:\s*[-–]\s*" + _CLARITY_GRADE_TOKEN + r")?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_clarity_shape(value):
+    """A clarity value is a single standard grade (FL, IF, VVS1, VVS2, VS1,
+    VS2, SI1, SI2, SI3, I1, I2, I3) or a trade-range combining two of them
+    with a dash (e.g. "VVS-VS", parcel/melee grading) -- the WHOLE (stripped)
+    value, same anchoring reasoning as _looks_like_color_range."""
+    return bool(value) and bool(_CLARITY_SHAPE_RE.match(value.strip()))
+
+
 def _extract_clarity_fuzzy(raw_text: str):
     """Fallback for clarity when it isn't found zippered with color on one
-    line: fuzzy-match the "clarity" label word on each line and return
-    whatever follows it verbatim."""
+    line: fuzzy-match the "clarity" label word on each line. Unrelated text
+    can land between the label's own colon and the real value's colon (e.g.
+    the Comments field's boilerplate getting zippered in when its own label
+    is lost: "Clarity : Grading & Identification ... : VVs-VS"), so prefer
+    whichever colon-delimited segment after the label actually looks like a
+    clarity grade/trade-range shape over the plain positional slice."""
     for line in raw_text.splitlines():
         span = _fuzzy_label_span(line, "clarity")
         if span:
+            segments = [s.strip(" .:-") for s in line[span[1]:].split(":")]
+            shaped = next((s for s in segments if _looks_like_clarity_shape(s)), None)
+            if shaped:
+                return shaped
             value = _value_between_colons_after(span[1], line)
             if value:
                 return value
