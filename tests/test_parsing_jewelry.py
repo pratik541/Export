@@ -1,6 +1,6 @@
 """Tests for the verbatim jewelry-card parser. Values are taken exactly as OCR
 reads them after each printed label — no normalization, whitelists, or guessing."""
-import parsing_jewelry
+from ocr import parsing_jewelry
 
 # OCR text mirroring the real card layout (label : value per line; Style# lives
 # inside the Comments sentence).

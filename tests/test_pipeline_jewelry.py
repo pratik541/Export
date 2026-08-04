@@ -3,8 +3,8 @@ card text, so this is deterministic and needs no real image/model."""
 import cv2
 import numpy as np
 
-import pipeline_jewelry
-import quality
+from ocr import pipeline_jewelry
+from ocr import quality
 
 _CARD_TEXT = "\n".join([
     "Report No. : 45J331632607",

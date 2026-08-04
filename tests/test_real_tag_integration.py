@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-import pipeline
+from ocr import pipeline
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 

@@ -68,7 +68,7 @@ which fields get read, how the green guide box is shaped, and which store a
 saved scan lands in.
 
 - **Diamond tag** is everything described elsewhere in this README —
-  barcode-anchored crop, `pipeline.py`, the six tracked fields, `tag_scans`.
+  barcode-anchored crop, `ocr/pipeline.py`, the six tracked fields, `tag_scans`.
 - **Jewelry card** targets the IGI Laboratory Grown Diamond Jewelry Report —
   a printed card with labeled fields (Report No., Shape and Cut, Est. Weight,
   Color, Clarity, Style#) and no usable barcode. Its guide box is bigger and
@@ -79,12 +79,15 @@ saved scan lands in.
   `box_width_pct`/`box_aspect`/`box_center_y_pct`, or `ui_common.guide_box_css`
   for the `st.camera_input()` fallback) take a `card_type` argument and stay
   matched by construction, not just by convention. There's no barcode/QR
-  step for jewelry cards at all — `pipeline_jewelry.process_image` runs the
-  same quality gate and PaddleOCR engine as the diamond pipeline, then reads
-  fields with `parsing_jewelry.py`, a **verbatim, label-anchored parser**:
-  each field is whatever text OCR printed immediately after its label, taken
-  exactly as-is — no normalization, no format/whitelist validation, no
-  fuzzy correction. `needs_review` is set only when a field came back blank,
+  step for jewelry cards at all — `ocr/pipeline_jewelry.process_image` runs
+  the same quality gate and PaddleOCR engine as the diamond pipeline, then
+  reads fields with `ocr/parsing_jewelry.py`, a **verbatim, label-anchored
+  parser**: each field is whatever text OCR printed immediately after its
+  label, taken exactly as-is — no normalization, no format/whitelist
+  validation, no fuzzy correction of the VALUE. (Clarity's label position is
+  the one exception located with `rapidfuzz` fuzzy matching when misread —
+  that only decides where to start reading, never touches what's stored.)
+  `needs_review` is set only when a field came back blank,
   never because a value looked "wrong". Accepted jewelry scans are saved to
   their own `jewelry_scans` table, separate from `tag_scans` — see "Central
   database" below.
@@ -144,33 +147,35 @@ Cropping tightly to the label also measurably improves OCR accuracy — see
    required DLLs, so this is usually only needed on Linux
    (`sudo apt-get install libzbar0`).
 4. Run the tests: `pytest`
-5. Run the app: `streamlit run app.py`. Model weights are bundled in `models/`
-   (not downloaded at runtime — see "OCR model files" below), so this starts
-   in a couple of seconds with no internet access needed.
+5. Run the app: `streamlit run app.py`. Model weights are bundled in
+   `ocr/models/` (not downloaded at runtime — see "OCR model files" below),
+   so this starts in a couple of seconds with no internet access needed.
 
 ## OCR model files
 
-`models/PP-OCRv6_tiny_det/` and `models/PP-OCRv6_tiny_rec/` are PaddleOCR's
-detection/recognition model weights, committed directly into this repo
-(~6.5MB total) rather than downloaded at runtime. This is deliberate, not
+`ocr/models/PP-OCRv6_tiny_det/` and `ocr/models/PP-OCRv6_tiny_rec/` are
+PaddleOCR's detection/recognition model weights, committed directly into this
+repo (~6.5MB total) rather than downloaded at runtime. This is deliberate, not
 just a convenience: PaddleX (PaddleOCR's backing library) defaults to
 resolving/downloading models from a remote hub (HuggingFace, ModelScope,
 AIStudio, or Baidu's BOS) on every fresh environment, and that failed outright
 on Streamlit Community Cloud with `No model source is available for model
 'PP-OCRv6_tiny_det'` — its sandboxed network couldn't reach any of those
-hosts. Bundling the files and pointing `ocr.py` at them via `*_model_dir`
-avoids that lookup entirely; this has been verified to work with the download
-cache completely removed, not just assumed.
+hosts. Bundling the files and pointing `ocr/__init__.py` at them via
+`*_model_dir` avoids that lookup entirely; this has been verified to work
+with the download cache completely removed, not just assumed.
 
 If you ever need to re-fetch these (e.g. to switch to a different PaddleOCR
-model), delete `models/PP-OCRv6_tiny_det/` and `models/PP-OCRv6_tiny_rec/`,
-remove the `*_model_dir` arguments in `ocr.py`'s `get_reader()`, and run the
-app once with internet access — PaddleX will download to its own cache
-(`~/.paddlex/official_models/`) that you can then copy back into `models/`.
+model), delete `ocr/models/PP-OCRv6_tiny_det/` and
+`ocr/models/PP-OCRv6_tiny_rec/`, remove the `*_model_dir` arguments in
+`ocr/__init__.py`'s `get_reader()`, and run the app once with internet access
+— PaddleX will download to its own cache (`~/.paddlex/official_models/`)
+that you can then copy back into `ocr/models/`.
 
 `requirements.txt` pins every dependency to an exact version deliberately,
-not just as a style choice: PP-OCRv6 (the model family bundled in `models/`)
-was only introduced in `paddleocr` 3.7.0. An earlier deploy with unpinned
+not just as a style choice: PP-OCRv6 (the model family bundled in
+`ocr/models/`) was only introduced in `paddleocr` 3.7.0. An earlier deploy
+with unpinned
 versions installed correctly but resolved an older `paddlex` that had never
 heard of `PP-OCRv6_tiny_det` (`ClassNotFoundException: 'PP-OCRv6_tiny_det' is
 not registered on BasePredictor`), despite the exact same `pip install`

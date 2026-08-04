@@ -5,8 +5,8 @@ import cv2
 import numpy as np
 
 import ocr
-import parsing_jewelry
-import quality
+from . import parsing_jewelry
+from . import quality
 
 
 def _decode_image_bytes(image_bytes: bytes):

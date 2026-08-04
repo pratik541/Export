@@ -1,4 +1,4 @@
-import parsing
+from ocr import parsing
 
 
 SAMPLE_RAW_TEXT = """C141619

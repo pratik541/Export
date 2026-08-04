@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-import pipeline
+from ocr import pipeline
 
 
 def _encode_png(image: np.ndarray) -> bytes:

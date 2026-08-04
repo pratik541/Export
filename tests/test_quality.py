@@ -1,6 +1,6 @@
 import numpy as np
 
-import quality
+from ocr import quality
 
 
 def _sharp_random_gray_bgr(height=100, width=100, seed=0):

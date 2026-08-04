@@ -4,8 +4,8 @@ import numpy as np
 import decoding
 import imaging
 import ocr
-import parsing
-import quality
+from . import parsing
+from . import quality
 
 
 def _decode_image_bytes(image_bytes: bytes):

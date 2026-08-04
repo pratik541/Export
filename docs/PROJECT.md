@@ -227,21 +227,37 @@ the export."
 | File | Responsibility |
 |---|---|
 | `app.py` | `st.navigation` entry point: sets `st.set_page_config`, runs the one-time OCR model warmup, calls `ui_common.init_state()`, and registers the two pages (`page_manage.render` at `url_path="manage"`, default; `page_scan.render` at `url_path="scan"`) |
-| `ui_common.py` | Shared, page-agnostic helpers and session-state used by both pages: `add_image`, `run_ocr` (routes to `pipeline` or `pipeline_jewelry` by `item["card_type"]`), `autosave` (routes to `db.save_scan` or `db.save_jewelry_scan`), `delete_item`, `item_status`, `FIELD_LABELS`/`JEWELRY_FIELD_LABELS`, the camera guide-box CSS (`CAMERA_GUIDE_CSS`, and `guide_box_css(card_type)` for the jewelry-aware variant) |
+| `ui_common.py` | Shared, page-agnostic helpers and session-state used by both pages: `add_image`, `run_ocr` (routes to `ocr.pipeline` or `ocr.pipeline_jewelry` by `item["card_type"]`), `autosave` (routes to `db.save_scan` or `db.save_jewelry_scan`), `delete_item`, `item_status`, `FIELD_LABELS`/`JEWELRY_FIELD_LABELS`, the camera guide-box CSS (`CAMERA_GUIDE_CSS`, and `guide_box_css(card_type)` for the jewelry-aware variant) |
 | `page_manage.py` | The **Manage** page (`render()`): "Card type" selector, file upload + camera input feeding a gallery, manual re-crop overlay (`streamlit-cropper`), per-item/"OCR all" triggers, results table, Excel download, and saved-records views/delete for **both** stores (`tag_scans`, `jewelry_scans`) |
-| `page_scan.py` | The **Scan** page (`render()`): "Card type" selector, mobile rear camera with an on-screen Capture button (vendored `rear_camera` component, green alignment box sized per card type, falling back to `st.camera_input` with the same box) → always-crop-to-box auto-OCR (`pipeline` or `pipeline_jewelry`) → auto-save → a compact no-scroll result card with an inline "Fix this reading" expander |
+| `page_scan.py` | The **Scan** page (`render()`): "Card type" selector, mobile rear camera with an on-screen Capture button (vendored `rear_camera` component, green alignment box sized per card type, falling back to `st.camera_input` with the same box) → always-crop-to-box auto-OCR (`ocr.pipeline` or `ocr.pipeline_jewelry`) → auto-save → a compact no-scroll result card with an inline "Fix this reading" expander |
 | `rear_camera/` | In-repo vendored custom component (`rear_camera_input()`): static HTML/JS/CSS (no build step), no pip dependency. Shows the phone's rear camera with a green guide box drawn in `frontend/style.css`, sized via optional `box_width_pct`/`box_aspect`/`box_center_y_pct` arguments (used for the jewelry card's bigger box), captures at the camera's native resolution when the on-screen Capture button is tapped, and returns PNG bytes |
 | `capture.py` | `build_item(image_bytes, filename, source, item_id, force_guide_box=False, card_type="diamond")` — turns raw capture bytes into a gallery item: decodes the barcode, auto-crops to the label when a usable box is found (else falls back to the full image); `force_guide_box=True` (used by Scan) skips barcode detection and always crops to the guide-box region instead; `card_type` selects the box geometry via `imaging.guide_box_crop`. Does **not** run OCR |
-| `pipeline.py` | `process_image(image_bytes, filename)` — orchestrates one (already-cropped) diamond-tag image through the OCR stage above |
-| `parsing_jewelry.py` | `parse_jewelry(raw_text)` / `validate_jewelry_fields(fields)` — the verbatim, label-anchored jewelry-card field extraction described in "Jewelry-card fields" above; no normalization or whitelist checks on VALUES. Clarity's label is the one exception, located via `rapidfuzz`-based fuzzy matching when misread (e.g. "Clarty"), since it has no shape/position fallback like the other fields |
-| `pipeline_jewelry.py` | `process_image(image_bytes, filename)` — same quality gate + OCR engine as `pipeline.py`, no barcode/QR step, parses with `parsing_jewelry.py` |
-| `quality.py` | The pre-OCR quality gate (blur/exposure/text-presence checks); shared by both pipelines |
 | `imaging.py` | OpenCV preprocessing (grayscale, denoise, adaptive threshold) — used for barcode/QR decoding only; also `crop_to_label`/`label_crop_box` (the barcode-anchored auto-crop), `center_box_crop` (the parameterized guide-box crop) and `guide_box_crop(image, card_type)` (picks diamond vs. jewelry geometry), and the `GUIDE_BOX_WIDTH_FRAC`/`GUIDE_BOX_ASPECT`/`GUIDE_BOX_CENTER_Y_FRAC` and `JEWELRY_GUIDE_BOX_WIDTH_FRAC`/`_ASPECT`/`_CENTER_Y_FRAC` constants defining each box's geometry — all used by `capture.py` |
 | `decoding.py` | Barcode/QR decoding via `pyzbar` |
-| `ocr.py` | OCR via PaddleOCR, plus the row-reconstruction logic that turns its per-text-box detections into printed lines |
-| `parsing.py` | Regex/whitelist field extraction and validation for the diamond tag |
 | `excel_export.py` | Builds the downloadable `.xlsx` from the results table (used for both the diamond and jewelry results/saved-records tables) |
 | `db.py` | Optional Supabase central store: upsert-save accepted scans, fetch shared records, `delete_one`/`delete_all` for `tag_scans`; `save_jewelry_scan`, `fetch_all_jewelry`, `delete_one_jewelry`/`delete_all_jewelry` for the separate `jewelry_scans` table; no-ops when unconfigured |
+
+### The `ocr/` package
+
+Everything that's specifically about running and interpreting OCR (as opposed
+to capture/UI/storage) lives in `ocr/`, a proper Python package — external
+callers still just do `import ocr` / `from ocr import pipeline` etc., nothing
+outside this package needed to change its calling convention:
+
+| File | Responsibility |
+|---|---|
+| `ocr/__init__.py` | The former top-level `ocr.py`, unchanged in content: OCR via PaddleOCR (`get_reader`, `run_ocr`, `run_ocr_jewelry`), plus the row-reconstruction logic (`group_into_lines` for diamond, `group_into_lines_by_overlap` for jewelry) that turns per-text-box detections into printed lines. `import ocr; ocr.run_ocr(...)` works exactly as before the move |
+| `ocr/models/` | Bundled PaddleOCR model weight files (`PP-OCRv6_tiny_det`/`_rec`), loaded via `_MODELS_DIR = Path(__file__).parent / "models"` in `ocr/__init__.py` — moved alongside it so that path still resolves unchanged |
+| `ocr/pipeline.py` | `process_image(image_bytes, filename)` — orchestrates one (already-cropped) diamond-tag image through the OCR stage above |
+| `ocr/pipeline_jewelry.py` | `process_image(image_bytes, filename)` — same quality gate + OCR engine as `ocr/pipeline.py`, no barcode/QR step, parses with `ocr/parsing_jewelry.py` |
+| `ocr/parsing.py` | Regex/whitelist field extraction and validation for the diamond tag |
+| `ocr/parsing_jewelry.py` | `parse_jewelry(raw_text)` / `validate_jewelry_fields(fields)` — the verbatim, label-anchored jewelry-card field extraction described in "Jewelry-card fields" above; no normalization or whitelist checks on VALUES. Clarity's label is the one exception, located via `rapidfuzz`-based fuzzy matching when misread (e.g. "Clarty"), since it has no shape/position fallback like the other fields |
+| `ocr/quality.py` | The pre-OCR quality gate (blur/exposure/text-presence checks); shared by both pipelines |
+
+`imaging.py`, `decoding.py`, and `capture.py` stay at the top level: they're
+capture/crop/barcode concerns used *before* OCR runs, not OCR itself, and
+`imaging.py`/`decoding.py` in particular are also used for barcode decoding
+independent of the OCR engine.
 
 ## Two-page structure (Manage / Scan)
 
@@ -344,14 +360,15 @@ same set of real tag photos (`tests/fixtures/`) rather than assumed:
    library backing PaddleOCR) defaults to resolving/downloading models from a
    remote hub at runtime, which failed outright in that sandboxed environment
    (`No model source is available for model 'PP-OCRv6_tiny_det'`) — fixed by
-   bundling the ~6.5MB model files directly in `models/` and loading them via
-   `*_model_dir` instead, verified to work with no network access at all.
+   bundling the ~6.5MB model files directly in `ocr/models/` and loading them
+   via `*_model_dir` instead, verified to work with no network access at all.
 
 PaddleOCR returns one detection per text fragment (a bounding box + text +
-confidence), not one continuous text block the way Tesseract does. `ocr.py`
-reconstructs printed lines by grouping fragments whose vertical centers are
-close together, sorted left-to-right — this is what lets the same line-based
-`parsing.py` logic work regardless of engine.
+confidence), not one continuous text block the way Tesseract does.
+`ocr/__init__.py` reconstructs printed lines by grouping fragments whose
+vertical centers (or, for jewelry, vertical extents) are close together,
+sorted left-to-right — this is what lets the same line-based `ocr/parsing.py`
+logic work regardless of engine.
 
 ## Central store (optional)
 

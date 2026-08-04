@@ -10,7 +10,7 @@ import streamlit as st
 
 import capture
 import db
-import pipeline
+from ocr import pipeline
 
 FIELD_LABELS = [
     ("igi_report_no", "IGI no."),
@@ -109,7 +109,7 @@ def item_by_id(item_id):
 
 
 def run_ocr(item):
-    import pipeline_jewelry
+    from ocr import pipeline_jewelry
     try:
         if item.get("card_type") == "jewelry":
             item["ocr_result"] = pipeline_jewelry.process_image(item["cropped_bytes"], item["filename"])
