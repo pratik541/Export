@@ -31,7 +31,7 @@ def test_build_rows_maps_every_working_sheet_column():
     assert list(rows[0].keys()) == builder.WORKING_SHEET_COLUMNS
     assert rows[0]["Invoice No."] == "TST001/26-27"
     assert rows[0]["Item No."] == 1
-    assert rows[0]["RITC"] == "12345678"
+    assert rows[0]["RITC"] == 12345678
     assert rows[0]["Item Description"] == "CAT ONE DESC"
     assert rows[0]["Qty."] == 50.0
     assert rows[0]["Unit of Qty"] == "GMS"
@@ -41,8 +41,8 @@ def test_build_rows_maps_every_working_sheet_column():
     assert rows[0]["Scheme Code"] == "00"
     assert rows[0]["End Use"] == "GNX100"
     assert rows[0]["IGST Payment Status"] == "LUT"
-    assert rows[0]["State Code"] == "27"
-    assert rows[0]["District Code"] == "483"
+    assert rows[0]["State Code"] == 27
+    assert rows[0]["District Code"] == 483
     assert rows[0]["Standard Qty"] == 0.05
     assert rows[0]["Standard Qty Unit"] == "KGS"
     assert rows[0]["FTA Code"] == "NCPTI"

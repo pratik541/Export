@@ -34,6 +34,11 @@ def _expected_rows():
 
 
 def test_generated_working_sheet_matches_the_real_sample_row_for_row():
+    wb = openpyxl.load_workbook(WORKING_SHEET_PATH, data_only=True)
+    ws = wb.worksheets[0]
+    header = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+    assert header == builder.WORKING_SHEET_COLUMNS
+
     categories = packing_list.parse_packing_list(PACKING_LIST_PATH.read_bytes())
     invoice_data = invoice_parser.parse_invoice(INVOICE_PATH.read_bytes())
     got_rows = builder.build_rows(categories, invoice_data)
@@ -41,18 +46,18 @@ def test_generated_working_sheet_matches_the_real_sample_row_for_row():
 
     assert len(got_rows) == len(want_rows) == 6
 
+    float_columns = {"Qty.", "Unit Price", "Standard Qty"}
     for got, want in zip(got_rows, want_rows):
-        assert got["RITC"] == str(want["RITC"])
-        assert got["Item Description"] == want["Item Description"]
-        assert math.isclose(got["Qty."], want["Qty."], rel_tol=1e-6)
-        assert math.isclose(got["Unit Price"], want["Unit Price"], rel_tol=1e-4)
-        assert math.isclose(got["Standard Qty"], want["Standard Qty"], abs_tol=1e-6)
-        assert got["Invoice No."] == want["Invoice No."]
-        assert int(got["State Code"]) == want["State Code"]
-        assert int(got["District Code"]) == want["District Code"]
-        assert got["FTA Code"] == want["FTA Code"]
-        assert got["IGST Payment Status"] == want["IGST Payment Status"]
-        assert got["RoDTEP"] == want["RoDTEP"]
+        for column in builder.WORKING_SHEET_COLUMNS:
+            if column in float_columns:
+                tolerance = 1e-4 if column == "Unit Price" else 1e-6
+                assert math.isclose(got[column], want[column], rel_tol=tolerance, abs_tol=1e-6), (
+                    f"{column}: got {got[column]!r}, want {want[column]!r}"
+                )
+            else:
+                assert got[column] == want[column], (
+                    f"{column}: got {got[column]!r}, want {want[column]!r}"
+                )
 
 
 def test_cross_validation_finds_no_mismatches_on_the_real_sample():

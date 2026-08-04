@@ -21,7 +21,7 @@ COL_AA_STONE_WT = 26
 COL_AD_FOB_VALUE = 29
 
 _CATEGORY_HEADER_RE = re.compile(r"^\[(\d+)\]\s*(.+)$")
-_PIECE_RE = re.compile(r"(\d+)\s+(\S+)\s+\((\w+)\)")
+_PIECE_RE = re.compile(r"(\d+)\s+(.+?)\s+\((\w+)\)")
 _ABBREVIATIONS = [
     (re.compile(r"LABORATORY GROWN DIAMOND", re.IGNORECASE), "LGD"),
     (re.compile(r"\(MECHANIZED\)", re.IGNORECASE), "(MECH)"),
@@ -94,12 +94,34 @@ def _finalize_category(current: dict) -> dict:
             "has no identifiable subtotal row."
         )
     row = current["subtotal_row"]
-    gross_wt = float(row[COL_J_GROSS_WT].value)
-    net_wt = float(row[COL_K_NET_WT].value)
-    stone_wt = float(row[COL_AA_STONE_WT].value)
-    fob_value = float(row[COL_AD_FOB_VALUE].value)
+    raw_values = {
+        "gross_wt": row[COL_J_GROSS_WT].value,
+        "net_wt": row[COL_K_NET_WT].value,
+        "stone_wt": row[COL_AA_STONE_WT].value,
+        "fob_value": row[COL_AD_FOB_VALUE].value,
+    }
+    missing = [name for name, value in raw_values.items() if value is None]
+    if missing:
+        raise PackingListParseError(
+            f"Category [{current['number']:02d}] \"{current['header']}\" "
+            f"subtotal row is missing: {', '.join(missing)}."
+        )
+    gross_wt = float(raw_values["gross_wt"])
+    net_wt = float(raw_values["net_wt"])
+    stone_wt = float(raw_values["stone_wt"])
+    fob_value = float(raw_values["fob_value"])
+    if gross_wt == 0:
+        raise PackingListParseError(
+            f"Category [{current['number']:02d}] \"{current['header']}\" "
+            "has a zero gross weight; cannot compute unit price."
+        )
 
     pieces = _PIECE_RE.findall(current["piece_breakdown"] or "")
+    if current["piece_breakdown"] and not pieces:
+        raise PackingListParseError(
+            f"Category [{current['number']:02d}] \"{current['header']}\" "
+            f"piece breakdown \"{current['piece_breakdown']}\" could not be parsed."
+        )
     piece_desc = ", ".join(
         f"{name}-{int(count):02d} {unit.upper()}" for count, name, unit in pieces
     )

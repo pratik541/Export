@@ -95,3 +95,36 @@ def test_category_with_no_subtotal_row_raises_parse_error():
 
     with pytest.raises(packing_list.PackingListParseError, match=r"\[01\]"):
         packing_list.parse_packing_list(_write(cells))
+
+
+def test_multi_word_piece_names_are_parsed_correctly():
+    cells = dict(_TWO_CATEGORY_CELLS)
+    cells[(12, "E")] = "(  3 EAR RING (Pcs) / 2 NOSE PIN (Pcs) )"
+
+    categories = packing_list.parse_packing_list(_write(cells))
+
+    assert "EAR RING-03 PCS, NOSE PIN-02 PCS" in categories[1]["description"]
+
+
+def test_missing_subtotal_value_raises_parse_error():
+    cells = dict(_TWO_CATEGORY_CELLS)
+    del cells[(10, "AA")]
+
+    with pytest.raises(packing_list.PackingListParseError, match=r"\[01\]"):
+        packing_list.parse_packing_list(_write(cells))
+
+
+def test_zero_gross_weight_raises_parse_error():
+    cells = dict(_TWO_CATEGORY_CELLS)
+    cells[(10, "J")] = 0
+
+    with pytest.raises(packing_list.PackingListParseError, match=r"\[01\]"):
+        packing_list.parse_packing_list(_write(cells))
+
+
+def test_unparseable_piece_breakdown_raises_parse_error():
+    cells = dict(_TWO_CATEGORY_CELLS)
+    cells[(8, "E")] = "not a valid breakdown string"
+
+    with pytest.raises(packing_list.PackingListParseError, match=r"\[01\]"):
+        packing_list.parse_packing_list(_write(cells))

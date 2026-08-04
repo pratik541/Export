@@ -37,16 +37,25 @@ def render():
     )
 
     if generate_clicked:
+        st.session_state.working_sheet_rows = None
+        st.session_state.working_sheet_warnings = []
         try:
             categories = packing_list.parse_packing_list(packing_list_file.getvalue())
         except packing_list.PackingListParseError as exc:
             st.error(f"Could not parse the packing list: {exc}")
             categories = None
+        except Exception as exc:
+            st.error(f"Could not read the packing list file: {exc}")
+            categories = None
 
         if categories is not None:
             invoice_data = invoice_parser.parse_invoice(invoice_file.getvalue())
-            st.session_state.working_sheet_warnings = builder.cross_validate(categories, invoice_data)
-            st.session_state.working_sheet_rows = builder.build_rows(categories, invoice_data)
+            rows = builder.build_rows(categories, invoice_data)
+            if not rows:
+                st.error("No category blocks found — is this the right Packing List?")
+            else:
+                st.session_state.working_sheet_warnings = builder.cross_validate(categories, invoice_data)
+                st.session_state.working_sheet_rows = rows
 
     if st.session_state.working_sheet_warnings:
         st.warning("\n".join(f"- {w}" for w in st.session_state.working_sheet_warnings))
