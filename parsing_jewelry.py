@@ -15,8 +15,16 @@ legible plus its position on the line (not by the OTHER label's spelling), or
 (b) by the VALUE's own distinctive shape (digit run, colour range, carat
 number), never by matching a value against a fixed whitelist of spellings. Once
 located, the value is stored EXACTLY as OCR produced it -- no reformatting, no
-spelling correction, no guessing."""
+spelling correction, no guessing.
+
+The one exception is LABEL matching for "clarity" (see _fuzzy_label_span):
+fuzzy string matching is used to find where that label is on a line despite
+misreads, because it has no shape/position fallback the way color/report_no/
+style_no do. This never touches the VALUE -- it only decides where to start
+slicing, and the slice itself is still returned verbatim."""
 import re
+
+from rapidfuzz import fuzz
 
 _FIELD_KEYS = ("report_no", "shape_cut", "est_weight", "color", "clarity", "style_no")
 
@@ -67,6 +75,37 @@ def _last_colon_value(raw_text: str, label_pattern: str):
     return None
 
 
+def _fuzzy_label_span(line: str, label: str, threshold: float = 80):
+    """Return the (start, end) span of the word in `line` that best fuzzy-
+    matches `label` (case-insensitive whole-word similarity), or None if
+    nothing on the line scores at/above `threshold`. Checked against every
+    word actually seen across the real-scan test fixtures: the one observed
+    misread ("Clarity" -> "Clarty") scores 92.3, the next-highest unrelated
+    word ("Carat") scores 66.7 -- 80 sits in the middle of that gap. Only
+    ever used to locate a label; the value that follows is still sliced out
+    positionally and returned verbatim."""
+    best_span, best_score = None, 0
+    for match in re.finditer(r"[A-Za-z]+", line):
+        score = fuzz.ratio(match.group().lower(), label)
+        if score > best_score and score >= threshold:
+            best_score = score
+            best_span = (match.start(), match.end())
+    return best_span
+
+
+def _extract_clarity_fuzzy(raw_text: str):
+    """Fallback for clarity when it isn't found zippered with color on one
+    line: fuzzy-match the "clarity" label word on each line and return
+    whatever follows it verbatim."""
+    for line in raw_text.splitlines():
+        span = _fuzzy_label_span(line, "clarity")
+        if span:
+            value = _value_between_colons_after(span[1], line)
+            if value:
+                return value
+    return None
+
+
 def _looks_like_color_range(value):
     """A colour grade range looks like two letters joined by a dash (e.g.
     'E-F', 'E - F'), regardless of OCR noise on the letters themselves."""
@@ -88,10 +127,13 @@ def _extract_clarity_and_color(raw_text: str):
     letter range) rather than by label print order, because the value order on
     this line has been observed to NOT always match the label order across
     different scans. Falls back to label-print order only when neither/both
-    values look like a colour range."""
+    values look like a colour range. Clarity's position is found via
+    _fuzzy_label_span so a misread label ("Clarity" -> "Clarty") doesn't
+    break the label-order tiebreaker."""
     for line in raw_text.splitlines():
         lower = line.lower()
-        clarity_pos = lower.find("clarity")
+        clarity_span = _fuzzy_label_span(line, "clarity")
+        clarity_pos = clarity_span[0] if clarity_span else -1
         color_pos = lower.find("colou")
         if color_pos == -1:
             color_pos = lower.find("color")
@@ -123,10 +165,11 @@ _REPORTNO_ANCHORED = re.compile(
 )
 _REPORTNO_GLOBAL = re.compile("(" + _REPORTNO_TOKEN + ")")
 
-# Est. Weight: the carat value has a distinctive numeric shape ("0.56 Carat"),
-# so it's usually found directly regardless of which label it's zippered
-# against, unless "Carat" itself is misread (see the positional fallback below).
-_WEIGHT_PATTERN_RE = re.compile(r"(\d+\.\d{1,2}\s*carat)", re.IGNORECASE)
+# Est. Weight: the carat value has a distinctive numeric shape ("0.56 Carat" or
+# the plural "3.24 Carats" for a multi-stone total), so it's usually found
+# directly regardless of which label it's zippered against, unless "Carat"
+# itself is misread (see the positional fallback below).
+_WEIGHT_PATTERN_RE = re.compile(r"(\d+\.\d{1,2}\s*carats?)", re.IGNORECASE)
 
 # Style code: a real IGI style code looks like AFDN352/9 -- a few uppercase
 # letters, then digits, optionally a slash and more digits. The "Style#" label
@@ -159,7 +202,7 @@ def parse_jewelry(raw_text: str) -> dict:
     )
 
     clarity, color = _extract_clarity_and_color(raw_text)
-    fields["clarity"] = clarity or _extract_after_label(raw_text, r"clarity")
+    fields["clarity"] = clarity or _extract_clarity_fuzzy(raw_text)
     fields["color"] = (_first_group(_COLOR_SHAPE_RE, raw_text)
                        or color or _extract_after_label(raw_text, r"colou?r"))
 

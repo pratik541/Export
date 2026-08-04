@@ -191,3 +191,43 @@ def test_parses_fourth_real_ocr_pass_with_color_zippered_to_weight_instead_of_cl
     assert f["clarity"] == "VS"   # zippered with "Comments" this time, not "Color"
     assert f["style_no"] == "AFDN352/9"
     assert parsing_jewelry.validate_jewelry_fields(f)["needs_review"] is False
+
+
+# A FIFTH real OCR pass, of a DIFFERENT physical card (a multi-stone ring, not
+# the single-diamond pendant of the first four fixtures): this time OCR did NOT
+# zipper Clarity/Color together at all -- they landed cleanly on separate
+# lines -- but the "Clarity" label itself was misread as "Clarty" (missing the
+# "i"). Clarity was located two ways: the zippered-line heuristic (moot here,
+# nothing zippered) and a fallback requiring the literal substring "clarity" on
+# a line -- "Clarty" doesn't contain that substring, so clarity came back None.
+# This is the true regression that broke a fifth time: clarity had no
+# label-independent fallback the way color/report_no/style_no do. Also caught
+# in the same card: "Tot, Est. Weight : 3.24 Carats" (plural, this card totals
+# 28 stones) was truncated to "3.24 Carat" -- the weight regex didn't account
+# for the plural and silently dropped a verbatim character.
+REAL_OCR_5 = "\n".join([
+    "INTERNATIONAL LABORATORY GROWN DIAMOND",
+    "GEMOLOGICAL JEWELRY REPORT",
+    "INSTITUTE",
+    "Report No, :43J936232607",
+    "Description : One White Gold Ring, weighing in total 3.22 g., confaining",
+    "Twenity Eight (28) Laboratory Grown Diamonds",
+    "Shape and Cut : (28) Emerald Cut",
+    "Tot, Est. Weight : 3.24 Carats",
+    "Color :F-G",
+    "Clarty : VS",
+    "Comments : Grading & Identification as mounting perrmits. Descripticn",
+    "and Weighits purported by the cllent., Report number engraved. Style#",
+    "AFDRB802/29",
+])
+
+
+def test_parses_fifth_real_ocr_pass_with_misread_clarity_label_and_plural_carats():
+    f = parsing_jewelry.parse_jewelry(REAL_OCR_5)
+    assert f["report_no"] == "43J936232607"
+    assert f["shape_cut"] == "(28) Emerald Cut"
+    assert f["est_weight"] == "3.24 Carats"  # verbatim, incl. the plural
+    assert f["color"] == "F-G"
+    assert f["clarity"] == "VS"              # found despite "Clarty" label
+    assert f["style_no"] == "AFDRB802/29"
+    assert parsing_jewelry.validate_jewelry_fields(f)["needs_review"] is False

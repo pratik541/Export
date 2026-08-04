@@ -195,7 +195,12 @@ item's cropped_bytes
      Shape and Cut, Est. Weight, Color, Clarity), scan OCR'd lines
      case-insensitively for that label at the start of the line, take
      everything after the line's ':' verbatim; Style# is matched by its own
-     pattern anywhere in the OCR text instead of a label-line scan
+     pattern anywhere in the OCR text instead of a label-line scan. Clarity
+     is the one exception with no shape/position fallback of its own, so its
+     label is located with `rapidfuzz` fuzzy string matching (tolerates
+     misreads like "Clarity" -> "Clarty") when the exact spelling isn't
+     found — this only decides where to start reading, the value itself is
+     still taken verbatim, never fuzzy-matched or corrected
   -> parsing_jewelry.validate_jewelry_fields: needs_review = True if any of
      the six fields is still blank — no format/whitelist checks at all
   -> one row: {filename, accepted, raw_ocr_text, report_no, shape_cut,
@@ -228,7 +233,7 @@ the export."
 | `rear_camera/` | In-repo vendored custom component (`rear_camera_input()`): static HTML/JS/CSS (no build step), no pip dependency. Shows the phone's rear camera with a green guide box drawn in `frontend/style.css`, sized via optional `box_width_pct`/`box_aspect`/`box_center_y_pct` arguments (used for the jewelry card's bigger box), captures at the camera's native resolution when the on-screen Capture button is tapped, and returns PNG bytes |
 | `capture.py` | `build_item(image_bytes, filename, source, item_id, force_guide_box=False, card_type="diamond")` — turns raw capture bytes into a gallery item: decodes the barcode, auto-crops to the label when a usable box is found (else falls back to the full image); `force_guide_box=True` (used by Scan) skips barcode detection and always crops to the guide-box region instead; `card_type` selects the box geometry via `imaging.guide_box_crop`. Does **not** run OCR |
 | `pipeline.py` | `process_image(image_bytes, filename)` — orchestrates one (already-cropped) diamond-tag image through the OCR stage above |
-| `parsing_jewelry.py` | `parse_jewelry(raw_text)` / `validate_jewelry_fields(fields)` — the verbatim, label-anchored jewelry-card field extraction described in "Jewelry-card fields" above; no normalization or whitelist checks |
+| `parsing_jewelry.py` | `parse_jewelry(raw_text)` / `validate_jewelry_fields(fields)` — the verbatim, label-anchored jewelry-card field extraction described in "Jewelry-card fields" above; no normalization or whitelist checks on VALUES. Clarity's label is the one exception, located via `rapidfuzz`-based fuzzy matching when misread (e.g. "Clarty"), since it has no shape/position fallback like the other fields |
 | `pipeline_jewelry.py` | `process_image(image_bytes, filename)` — same quality gate + OCR engine as `pipeline.py`, no barcode/QR step, parses with `parsing_jewelry.py` |
 | `quality.py` | The pre-OCR quality gate (blur/exposure/text-presence checks); shared by both pipelines |
 | `imaging.py` | OpenCV preprocessing (grayscale, denoise, adaptive threshold) — used for barcode/QR decoding only; also `crop_to_label`/`label_crop_box` (the barcode-anchored auto-crop), `center_box_crop` (the parameterized guide-box crop) and `guide_box_crop(image, card_type)` (picks diamond vs. jewelry geometry), and the `GUIDE_BOX_WIDTH_FRAC`/`GUIDE_BOX_ASPECT`/`GUIDE_BOX_CENTER_Y_FRAC` and `JEWELRY_GUIDE_BOX_WIDTH_FRAC`/`_ASPECT`/`_CENTER_Y_FRAC` constants defining each box's geometry — all used by `capture.py` |
