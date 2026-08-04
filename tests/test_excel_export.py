@@ -29,3 +29,20 @@ def test_build_excel_bytes_handles_empty_dataframe():
     roundtripped = pd.read_excel(BytesIO(excel_bytes))
     assert list(roundtripped.columns) == ["filename", "igi_report_no"]
     assert len(roundtripped) == 0
+
+
+def test_build_working_sheet_bytes_roundtrips_dataframe_contents():
+    df = pd.DataFrame({
+        "Invoice No.": ["TST001/26-27"],
+        "Item No.": [1],
+        "RITC": ["12345678"],
+        "Qty.": [50.0],
+    })
+
+    excel_bytes = excel_export.build_working_sheet_bytes(df)
+    assert isinstance(excel_bytes, bytes)
+    assert len(excel_bytes) > 0
+
+    roundtripped = pd.read_excel(BytesIO(excel_bytes))
+    assert list(roundtripped["Invoice No."]) == ["TST001/26-27"]
+    assert list(roundtripped["RITC"]) == [12345678]
