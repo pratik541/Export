@@ -17,6 +17,22 @@
   pointer-events: none;
 }
 
+#capture-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px;
+  font: 600 16px -apple-system, Segoe UI, Roboto, sans-serif;
+  color: #fff;
+  background: #00a000;
+  border: none;
+  border-radius: 8px;
+}
+
+#capture-btn:active {
+  background: #007800;
+}
+
 #hint {
   font: 13px/1.4 -apple-system, Segoe UI, Roboto, sans-serif;
   color: #555;

@@ -1,10 +1,11 @@
 """In-repo rear-camera custom component with a green alignment guide box.
 
 Vendored (and adapted) from streamlit-back-camera-input so we control the
-frontend: it shows the phone's REAR camera, captures on a single tap at the
-camera's native resolution, and overlays a green guide box. The box geometry in
-frontend/style.css MUST match imaging.GUIDE_BOX_* so what the user frames equals
-what capture.center_box_crop crops. Static files only — no build step."""
+frontend: it shows the phone's REAR camera, captures at the camera's native
+resolution when the on-screen Capture button is tapped, and overlays a green
+guide box. The box geometry in frontend/style.css MUST match
+imaging.GUIDE_BOX_* so what the user frames equals what capture.center_box_crop
+crops. Static files only — no build step."""
 import base64
 from pathlib import Path
 from typing import Optional

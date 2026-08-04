@@ -1,4 +1,3 @@
-import cv2
 import numpy as np
 
 import imaging
@@ -111,67 +110,3 @@ def test_guide_box_crop_jewelry_is_taller_than_diamond():
     d = imaging.guide_box_crop(img, "diamond")
     j = imaging.guide_box_crop(img, "jewelry")
     assert j.shape[0] > d.shape[0]   # jewelry box captures more vertical area
-
-
-def _card_canvas(height=1000, width=1400, corners=None, bg=30, fg=220):
-    img = np.full((height, width, 3), bg, dtype=np.uint8)
-    if corners is not None:
-        cv2.fillConvexPoly(img, np.array(corners, dtype=np.int32), (fg, fg, fg))
-    return img
-
-
-def test_perspective_correct_jewelry_card_rectifies_a_tilted_card():
-    # A card-shaped quad nudged off-axis to simulate a tilted photo. Area is
-    # ~50% of the search region (comfortably above the 35% floor) and its
-    # aspect ratio (~1.28) sits inside the accepted 1.0-2.2 band.
-    corners = [(250, 150), (1150, 100), (1180, 850), (220, 900)]
-    img = _card_canvas(corners=corners)
-    result = imaging.perspective_correct_jewelry_card(img)
-    h, w = result.shape[:2]
-    assert h > 0 and w > 0
-    assert 1.0 <= (w / h) <= 2.2
-    # The input quad is tilted, so a naive (unwarped) crop would leave dark
-    # background triangles in its corners. A correct perspective warp maps
-    # the quad's 4 corners to the output's 4 corners, so every corner of the
-    # warped result should read as card (bright), not background (dark) --
-    # this is what actually distinguishes "warped" from "just cropped".
-    inset = 5
-    corners_to_check = [
-        result[inset, inset], result[inset, w - 1 - inset],
-        result[h - 1 - inset, inset], result[h - 1 - inset, w - 1 - inset],
-    ]
-    for corner_pixel in corners_to_check:
-        assert corner_pixel.mean() > 150  # bright/card-colored, not the bg=30 fill
-
-
-def test_perspective_correct_jewelry_card_raises_when_no_card_present():
-    img = _card_canvas(corners=None)  # uniform background, no edges at all
-    try:
-        imaging.perspective_correct_jewelry_card(img)
-        assert False, "expected ValueError"
-    except ValueError:
-        pass
-
-
-def test_perspective_correct_jewelry_card_raises_when_quad_too_small():
-    # Tiny quad (100x70 = 7,000px^2) relative to the ~1.4M px^2 search region
-    # -- clearly below the 35% area floor.
-    corners = [(650, 450), (750, 450), (750, 520), (650, 520)]
-    img = _card_canvas(corners=corners)
-    try:
-        imaging.perspective_correct_jewelry_card(img)
-        assert False, "expected ValueError"
-    except ValueError:
-        pass
-
-
-def test_perspective_correct_jewelry_card_raises_when_aspect_implausible():
-    # 1300x420 rectangle: area 546,000px^2 clears the area floor, but aspect
-    # 1300/420 = 3.1 is well outside the accepted 1.0-2.2 band.
-    corners = [(50, 290), (1350, 290), (1350, 710), (50, 710)]
-    img = _card_canvas(corners=corners)
-    try:
-        imaging.perspective_correct_jewelry_card(img)
-        assert False, "expected ValueError"
-    except ValueError:
-        pass

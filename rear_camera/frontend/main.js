@@ -17,6 +17,7 @@ function onRender(event) {
   const video = document.getElementById("video");
   const canvas = document.getElementById("canvas");
   const container = document.getElementById("container");
+  const captureBtn = document.getElementById("capture-btn");
 
   const constraints = { facingMode: "environment", advanced: [{ focusMode: "continuous" }] };
   navigator.mediaDevices
@@ -25,8 +26,8 @@ function onRender(event) {
       video.srcObject = stream;
       video.play();
       video.addEventListener("loadedmetadata", function () {
-        // Size the iframe to the actual video height + the hint line.
-        Streamlit.setFrameHeight(container.offsetHeight + 34);
+        // Size the iframe to the actual video height + the capture button + the hint line.
+        Streamlit.setFrameHeight(container.offsetHeight + 82);
       });
     })
     .catch(function (err) {
@@ -45,7 +46,7 @@ function onRender(event) {
     sendValue(canvas.toDataURL("image/png"));
   }
 
-  video.addEventListener("click", takePicture);
+  captureBtn.addEventListener("click", takePicture);
   Streamlit.setFrameHeight(height || 460); // initial; refined on loadedmetadata
   window.rendered = true;
 }

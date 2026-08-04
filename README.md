@@ -27,8 +27,9 @@ desktop, the hamburger icon on mobile). **Manage** opens by default.
   saved-records view with delete. This is the page "How it works" below
   describes.
 - **Scan** — a mobile-first page for one tag at a time: the rear-camera
-  preview shows a green alignment box, and a single tap captures a tag and
-  always crops it to that box at the camera's native resolution — so every
+  preview shows a green alignment box, and tapping the on-screen Capture
+  button takes a tag photo and always crops it to that box at the camera's
+  native resolution — so every
   Scan capture is framed the same way and contains the whole tag, whether or
   not a barcode is visible. (Manage, described below, still crops to the
   barcode position first — see "How it works".) The tag is then OCR'd and,
@@ -106,12 +107,7 @@ saved scan lands in.
    have no such guide box to fall back to, so an upload with no usable
    barcode keeps the full, uncropped photo instead of failing. Each item
    records how it was cropped in a `crop_method` field (`"barcode"`,
-   `"guide_box"`, `"perspective"` (jewelry cards, whose guide-box fallback is
-   perspective-corrected to a flat rectangle rather than statically cropped),
-   `"manual"`, or `None` for the uncropped fallback). A jewelry camera capture
-   can also be rejected before it ever becomes a gallery item — with a
-   warning message — if the perspective correction can't confidently find the
-   card's edges.
+   `"guide_box"`, `"manual"`, or `None` for the uncropped fallback).
 3. **Gallery** — every captured photo appears as a thumbnail (the cropped
    version) with a status: not yet scanned, OK, needs review, or failed, plus
    a note if auto-crop couldn't find a barcode. A metrics row above the
