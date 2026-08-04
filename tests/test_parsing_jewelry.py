@@ -231,3 +231,36 @@ def test_parses_fifth_real_ocr_pass_with_misread_clarity_label_and_plural_carats
     assert f["clarity"] == "VS"              # found despite "Clarty" label
     assert f["style_no"] == "AFDRB802/29"
     assert parsing_jewelry.validate_jewelry_fields(f)["needs_review"] is False
+
+
+# Parcel/melee-grading cards report a TRADE RANGE for clarity instead of a
+# single grade (e.g. "VVS-VS", not just "VS"). _looks_like_color_range used a
+# plain substring search, so a trade range like "VVS-VS" or "SI-I" hides a
+# single-letter-dash-single-letter substring ("S-V", "I-I") that false-
+# positived as "looks like a colour range" -- making both zippered candidates
+# look colour-shaped, so the swap-decision fell back to fragile label-order
+# guessing instead of confidently telling clarity and colour apart.
+def test_clarity_trade_range_not_misidentified_as_color():
+    text = "Clarity Color : VVS-VS :F-G"
+    f = parsing_jewelry.parse_jewelry(text)
+    assert f["clarity"] == "VVS-VS"
+    assert f["color"] == "F-G"
+
+
+def test_clarity_trade_range_correct_even_with_flipped_value_order():
+    # Same failure class as REAL_OCR_3: the VALUE order on a zippered line
+    # doesn't always match the label order.
+    text = "Clarity Color : F-G :VVS-VS"
+    f = parsing_jewelry.parse_jewelry(text)
+    assert f["clarity"] == "VVS-VS"
+    assert f["color"] == "F-G"
+
+
+def test_other_clarity_trade_ranges_not_misidentified_as_color():
+    for clarity_val, color_val in [
+        ("VS-SI", "E-F"), ("SI-I", "D-E"), ("VVS-SI", "F-G"), ("FL-VVS", "D-E"),
+    ]:
+        text = f"Clarity Color : {clarity_val} :{color_val}"
+        f = parsing_jewelry.parse_jewelry(text)
+        assert f["clarity"] == clarity_val
+        assert f["color"] == color_val

@@ -107,9 +107,16 @@ def _extract_clarity_fuzzy(raw_text: str):
 
 
 def _looks_like_color_range(value):
-    """A colour grade range looks like two letters joined by a dash (e.g.
-    'E-F', 'E - F'), regardless of OCR noise on the letters themselves."""
-    return bool(value) and bool(re.search(r"[A-Za-z]\s*[-–]\s*[A-Za-z]", value))
+    """A colour grade range is the WHOLE value being two single letters
+    joined by a dash (e.g. 'E-F', 'E - F'), regardless of OCR noise on the
+    letters themselves. Anchored to the full (stripped) value, not a
+    substring search: a clarity trade-range like "VVS-VS" or "SI-I" (parcel/
+    melee grading -- see the clarity grade list below) contains a hidden
+    single-letter-dash-single-letter substring ("S-V" inside "VVS-VS") that a
+    plain substring search used to false-positive on, making the clarity/
+    color swap-decision below ambiguous and fall back to fragile label-order
+    guessing."""
+    return bool(value) and bool(re.fullmatch(r"[A-Za-z]\s*[-–]\s*[A-Za-z]", value.strip()))
 
 
 # Colour value's own shape, searched globally: a colour grade range is a
