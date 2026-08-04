@@ -8,3 +8,8 @@ __pycache__/
 docs/superpowers/
 .superpowers/
 .streamlit/secrets.toml
+
+# Real sample shipment files (bank account, GST/PAN/IEC numbers, real
+# customer name) -- local-only, never committed. *.xlsx above already
+# covers two of these; this covers the whole folder including the PDF.
+Data/
