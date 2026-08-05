@@ -266,24 +266,18 @@ def render():
                     st.session_state.confirm_delete_all = True
 
                 if st.session_state.confirm_delete_all:
-                    st.error("This permanently deletes ALL saved records for everyone. Type DELETE to confirm.")
-                    typed = st.text_input("Type DELETE", key="delete_all_confirm_text", label_visibility="collapsed")
+                    st.error("This permanently deletes ALL saved records for everyone. Are you sure?")
                     c1, c2 = st.columns(2)
-                    if c1.button("Confirm delete all", type="primary", key="confirm_delete_all_btn"):
-                        if typed == "DELETE":
-                            db.delete_all()
-                            st.session_state.confirm_delete_all = False
-                            st.session_state.pop("delete_all_confirm_text", None)
-                            if db.fetch_all():  # rows still there -> the delete had no effect
-                                st.warning("Delete had no effect — add the delete policy in Supabase (see README).")
-                            else:
-                                st.toast("All saved records deleted", icon=":material/delete_forever:")
-                                st.rerun()
-                        else:
-                            st.warning("Type DELETE exactly to confirm.")
-                    if c2.button("Cancel", key="cancel_delete_all"):
+                    if c1.button("Yes, delete all", type="primary", key="confirm_delete_all_btn"):
+                        db.delete_all()
                         st.session_state.confirm_delete_all = False
-                        st.session_state.pop("delete_all_confirm_text", None)
+                        if db.fetch_all():  # rows still there -> the delete had no effect
+                            st.warning("Delete had no effect — add the delete policy in Supabase (see README).")
+                        else:
+                            st.toast("All saved records deleted", icon=":material/delete_forever:")
+                            st.rerun()
+                    if c2.button("No, cancel", key="cancel_delete_all"):
+                        st.session_state.confirm_delete_all = False
                         st.rerun()
 
                 st.caption("Delete a single record:")
@@ -323,24 +317,18 @@ def render():
                     st.session_state.confirm_delete_all_jewelry = True
 
                 if st.session_state.confirm_delete_all_jewelry:
-                    st.error("This permanently deletes ALL saved jewelry records for everyone. Type DELETE to confirm.")
-                    typed = st.text_input("Type DELETE", key="delete_all_jewelry_confirm_text", label_visibility="collapsed")
+                    st.error("This permanently deletes ALL saved jewelry records for everyone. Are you sure?")
                     c1, c2 = st.columns(2)
-                    if c1.button("Confirm delete all", type="primary", key="confirm_delete_all_jewelry_btn"):
-                        if typed == "DELETE":
-                            db.delete_all_jewelry()
-                            st.session_state.confirm_delete_all_jewelry = False
-                            st.session_state.pop("delete_all_jewelry_confirm_text", None)
-                            if db.fetch_all_jewelry():  # rows still there -> the delete had no effect
-                                st.warning("Delete had no effect — add the delete policy in Supabase (see README).")
-                            else:
-                                st.toast("All saved jewelry records deleted", icon=":material/delete_forever:")
-                                st.rerun()
-                        else:
-                            st.warning("Type DELETE exactly to confirm.")
-                    if c2.button("Cancel", key="cancel_delete_all_jewelry"):
+                    if c1.button("Yes, delete all", type="primary", key="confirm_delete_all_jewelry_btn"):
+                        db.delete_all_jewelry()
                         st.session_state.confirm_delete_all_jewelry = False
-                        st.session_state.pop("delete_all_jewelry_confirm_text", None)
+                        if db.fetch_all_jewelry():  # rows still there -> the delete had no effect
+                            st.warning("Delete had no effect — add the delete policy in Supabase (see README).")
+                        else:
+                            st.toast("All saved jewelry records deleted", icon=":material/delete_forever:")
+                            st.rerun()
+                    if c2.button("No, cancel", key="cancel_delete_all_jewelry"):
+                        st.session_state.confirm_delete_all_jewelry = False
                         st.rerun()
 
                 st.caption("Delete a single record:")

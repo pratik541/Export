@@ -197,7 +197,7 @@ def test_saved_jewelry_records_per_row_delete_calls_delete_one_jewelry(monkeypat
     assert calls == ["J12345"]                          # per-row delete really called db.delete_one_jewelry
 
 
-def test_delete_all_only_fires_when_DELETE_typed(monkeypatch):
+def test_delete_all_requires_yes_no_confirmation(monkeypatch):
     import db
     n = {"count": 0}
     monkeypatch.setattr(db, "is_enabled", lambda: True)
@@ -207,10 +207,10 @@ def test_delete_all_only_fires_when_DELETE_typed(monkeypatch):
     at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
     at.run()
     at.button(key="delete_all_saved").click().run()                    # reveal confirm box
-    at.text_input(key="delete_all_confirm_text").set_value("nope").run()
+    at.button(key="cancel_delete_all").click().run()
+    assert n["count"] == 0                                             # "No" -> no delete
+    assert not at.session_state["confirm_delete_all"]
+    at.button(key="delete_all_saved").click().run()                    # reveal confirm box again
     at.button(key="confirm_delete_all_btn").click().run()
-    assert n["count"] == 0                                             # wrong text -> no delete
-    at.text_input(key="delete_all_confirm_text").set_value("DELETE").run()
-    at.button(key="confirm_delete_all_btn").click().run()
-    assert n["count"] == 1                                             # correct text -> delete fires
+    assert n["count"] == 1                                             # "Yes" -> delete fires
     assert not at.exception
