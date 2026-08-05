@@ -24,7 +24,10 @@ def _write(cells):
 _TWO_CATEGORY_CELLS = {
     (2, "A"): "TEST EXPORTER PVT LTD",
     (3, "A"): "TST001/26-27",
-    (6, "A"): "Sr No", (6, "G"): "RITC",
+    (6, "A"): "Sr No", (6, "D"): "Style No.", (6, "F"): "Category",
+    (6, "G"): "RITC", (6, "H"): "KT", (6, "J"): "Gross Wt in gms",
+    (6, "K"): "Net Wt in gms", (6, "AA"): "Total Cts. Stone wt",
+    (6, "AD"): "Total FOB Value $",
     # Category 1
     (7, "A"): "[01] TEST GOLD JEWELLERY STUDDED WITH LABORATORY GROWN DIAMOND  (MECHANIZED)",
     (8, "A"): "Total:", (8, "B"): 1, (8, "C"): "Unit", (8, "E"): "(  1 RING (Pcs) )",
@@ -135,4 +138,42 @@ def test_missing_ritc_raises_parse_error():
     del cells[(9, "G")]
 
     with pytest.raises(packing_list.PackingListParseError, match=r"\[01\]"):
+        packing_list.parse_packing_list(_write(cells))
+
+
+def test_parses_a_packing_list_whose_trailing_columns_are_shifted_left():
+    # Real-world regression (JNE019): that export omitted a blank spacer
+    # column present in the original reference file, shifting every column
+    # from "Rate $ Per Cts" onward one position left -- "Total Cts. Stone wt"
+    # landed at Z instead of AA, "Total FOB Value $" at AC instead of AD.
+    # Column-position-hardcoded parsing raised IndexError on this file;
+    # header-label-driven column resolution must handle it correctly.
+    cells = {
+        (2, "A"): "TEST EXPORTER PVT LTD",
+        (3, "A"): "TST001/26-27",
+        (6, "A"): "Sr No", (6, "D"): "Style No.", (6, "F"): "Category",
+        (6, "G"): "RITC", (6, "H"): "KT", (6, "J"): "Gross Wt in gms",
+        (6, "K"): "Net Wt in gms", (6, "Z"): "Total Cts. Stone wt",
+        (6, "AC"): "Total FOB Value $",
+        (7, "A"): "[01] TEST GOLD JEWELLERY STUDDED WITH LABORATORY GROWN DIAMOND (MECHANIZED)",
+        (8, "A"): "Total:", (8, "B"): 1, (8, "C"): "Unit", (8, "E"): "(  1 RING (Pcs) )",
+        (9, "A"): 1, (9, "D"): "STYLE1", (9, "F"): "RING", (9, "G"): "12345678", (9, "H"): "18KTY",
+        (9, "J"): 50.0, (9, "K"): 45.0, (9, "Z"): 0.5, (9, "AC"): 600.0,
+        (10, "J"): 50.0, (10, "K"): 45.0, (10, "Z"): 0.5, (10, "AC"): 600.0,
+    }
+
+    categories = packing_list.parse_packing_list(_write(cells))
+
+    assert len(categories) == 1
+    cat = categories[0]
+    assert cat["stone_wt"] == 0.5
+    assert cat["fob_value"] == 600.0
+    assert cat["unit_price"] == 12.0
+
+
+def test_missing_header_column_raises_parse_error():
+    cells = dict(_TWO_CATEGORY_CELLS)
+    del cells[(6, "AD")]
+
+    with pytest.raises(packing_list.PackingListParseError, match="fob_value"):
         packing_list.parse_packing_list(_write(cells))

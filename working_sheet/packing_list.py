@@ -2,23 +2,37 @@
 scanning for structural markers (a "[NN] ..." header, a "Total:" piece
 breakdown, and a subtotal row identified by which columns are populated) --
 not fixed row numbers, since category count and product mix vary between
-shipments."""
+shipments. Data columns (RITC, weights, stone/FOB value) are resolved from
+the header row's labels rather than fixed letters: a real export (JNE019)
+omitted a blank spacer column present in the original reference file
+(JNE016), shifting every column from "Rate $ Per Cts" onward one position
+left -- hardcoded column positions broke on it (IndexError), while
+label-based resolution tolerates the shift."""
 import re
 from io import BytesIO
 
 import openpyxl
 
-# 0-indexed column positions, matching the Packing List export's lettering.
+# Column A always carries the row-type markers ("[NN] ...", "Total:") --
+# structural, not a data column, so it's never resolved from a label.
 COL_A_SR_NO = 0
+# The "Total:" row's piece-count breakdown is always in column E in both
+# real exports seen so far; unlike the data columns below, a shift here
+# hasn't been observed, so it's left as a fixed position.
 COL_E_TOTAL_BREAKDOWN = 4
-COL_D_STYLE_NO = 3
-COL_F_CATEGORY = 5
-COL_G_RITC = 6
-COL_H_KT = 7
-COL_J_GROSS_WT = 9
-COL_K_NET_WT = 10
-COL_AA_STONE_WT = 26
-COL_AD_FOB_VALUE = 29
+
+# label substrings (matched case-insensitively against each header cell,
+# whitespace-normalized) -> resolved-column dict key.
+_HEADER_LABELS = {
+    "style_no": "style no",
+    "category": "category",
+    "kt": "kt",
+    "ritc": "ritc",
+    "gross_wt": "gross wt",
+    "net_wt": "net wt",
+    "stone_wt": "total cts",
+    "fob_value": "total fob value",
+}
 
 _CATEGORY_HEADER_RE = re.compile(r"^\[(\d+)\]\s*(.+)$")
 _PIECE_RE = re.compile(r"(\d+)\s+(.+?)\s+\((\w+)\)")
@@ -35,17 +49,20 @@ class PackingListParseError(ValueError):
 def parse_packing_list(file_bytes: bytes) -> list[dict]:
     wb = openpyxl.load_workbook(BytesIO(file_bytes), data_only=True)
     ws = wb.worksheets[0]
+    rows = list(ws.iter_rows(values_only=False))
+
+    col = _resolve_columns(_find_header_row(rows))
 
     categories = []
     current = None
-    for row in ws.iter_rows(values_only=False):
+    for row in rows:
         a_value = row[COL_A_SR_NO].value
 
         if isinstance(a_value, str):
             header_match = _CATEGORY_HEADER_RE.match(a_value.strip())
             if header_match:
                 if current is not None:
-                    categories.append(_finalize_category(current))
+                    categories.append(_finalize_category(current, col))
                 current = {
                     "number": int(header_match.group(1)),
                     "header": _normalize_whitespace(header_match.group(2)),
@@ -65,29 +82,66 @@ def parse_packing_list(file_bytes: bytes) -> list[dict]:
                 current["piece_breakdown"] = breakdown
             continue
 
-        if current["ritc"] is None and row[COL_G_RITC].value:
-            current["ritc"] = str(row[COL_G_RITC].value)
+        if current["ritc"] is None and row[col["ritc"]].value:
+            current["ritc"] = str(row[col["ritc"]].value)
 
-        if _is_subtotal_row(row):
+        if _is_subtotal_row(row, col):
             current["subtotal_row"] = row
 
     if current is not None:
-        categories.append(_finalize_category(current))
+        categories.append(_finalize_category(current, col))
 
     return categories
 
 
-def _is_subtotal_row(row) -> bool:
-    return (
-        row[COL_A_SR_NO].value is None
-        and row[COL_D_STYLE_NO].value is None
-        and row[COL_F_CATEGORY].value is None
-        and row[COL_H_KT].value is None
-        and row[COL_J_GROSS_WT].value is not None
+def _find_header_row(rows):
+    for row in rows:
+        labels = [_normalize_whitespace(str(c.value)).lower() for c in row if c.value is not None]
+        if any("sr no" in label for label in labels) and any("style" in label for label in labels):
+            return row
+    raise PackingListParseError(
+        "Could not find the header row (expecting columns like \"Sr No\" and "
+        "\"Style No.\") in this file. Please confirm this is the packing list export."
     )
 
 
-def _finalize_category(current: dict) -> dict:
+def _resolve_columns(header_row) -> dict:
+    resolved = {}
+    missing = []
+    for key, pattern in _HEADER_LABELS.items():
+        idx = _find_col(header_row, pattern)
+        if idx is None:
+            missing.append(key)
+        else:
+            resolved[key] = idx
+    if missing:
+        raise PackingListParseError(
+            "Could not locate column(s) in the header row: " + ", ".join(missing) +
+            ". The packing list layout may have changed."
+        )
+    return resolved
+
+
+def _find_col(header_row, pattern):
+    for idx, cell in enumerate(header_row):
+        if cell.value is None:
+            continue
+        if pattern in _normalize_whitespace(str(cell.value)).lower():
+            return idx
+    return None
+
+
+def _is_subtotal_row(row, col) -> bool:
+    return (
+        row[COL_A_SR_NO].value is None
+        and row[col["style_no"]].value is None
+        and row[col["category"]].value is None
+        and row[col["kt"]].value is None
+        and row[col["gross_wt"]].value is not None
+    )
+
+
+def _finalize_category(current: dict, col: dict) -> dict:
     if current["subtotal_row"] is None:
         raise PackingListParseError(
             f"Category [{current['number']:02d}] \"{current['header']}\" "
@@ -100,10 +154,10 @@ def _finalize_category(current: dict) -> dict:
         )
     row = current["subtotal_row"]
     raw_values = {
-        "gross_wt": row[COL_J_GROSS_WT].value,
-        "net_wt": row[COL_K_NET_WT].value,
-        "stone_wt": row[COL_AA_STONE_WT].value,
-        "fob_value": row[COL_AD_FOB_VALUE].value,
+        "gross_wt": row[col["gross_wt"]].value,
+        "net_wt": row[col["net_wt"]].value,
+        "stone_wt": row[col["stone_wt"]].value,
+        "fob_value": row[col["fob_value"]].value,
     }
     missing = [name for name, value in raw_values.items() if value is None]
     if missing:
