@@ -269,6 +269,42 @@ def test_parses_sixth_real_ocr_pass_with_comments_blob_zippered_onto_clarity_lin
     assert parsing_jewelry.validate_jewelry_fields(f)["needs_review"] is False
 
 
+# A SEVENTH real OCR pass, of yet another physical card (a 7-diamond gold
+# ring): the style code "AFDRA11501/2" has a 5-digit run before the slash --
+# every style code seen so far ("AFDN352/9", "AFDRB802/29", "AFDRB201/110")
+# had at most 3 digits there, so _STYLE_CODE_TOKEN's \d{2,4} cap was never
+# exercised past 3. \d{2,4} can't match a 5-digit run at all (there's no word
+# boundary partway through a contiguous digit run), so style_no silently came
+# back None -- not a truncation, a total miss.
+REAL_OCR_7 = "\n".join([
+    "INTERNATIONAL LABORATORY GROWN DIAMOND",
+    "GEMOLOGICAL JEWELRY REPORT",
+    "INSTITUTE",
+    "Report No. :45J330562608",
+    "Description : One Gold Ring. weighing in total 2.75 g.. containing Seven",
+    "(7) Laboratory Grown Diamonds",
+    "Shape and Cut t: Princess Cut",
+    "Tot. Est. Weight : 1.84 Carat",
+    "Color :F-G",
+    "Ciarity : VS",
+    "Comments : Grading & Identification as mounting permits. Description",
+    "and Weights purported by the clent. Report number engraved. Style#",
+    "AFDRA11501/2",
+    " Tha mpord t muRcF o ors tees ord Co",
+])
+
+
+def test_parses_seventh_real_ocr_pass_with_five_digit_style_code():
+    f = parsing_jewelry.parse_jewelry(REAL_OCR_7)
+    assert f["report_no"] == "45J330562608"
+    assert f["shape_cut"] == "Princess Cut"
+    assert f["est_weight"] == "1.84 Carat"
+    assert f["color"] == "F-G"
+    assert f["clarity"] == "VS"
+    assert f["style_no"] == "AFDRA11501/2"  # NOT None -- 5-digit run must still match
+    assert parsing_jewelry.validate_jewelry_fields(f)["needs_review"] is False
+
+
 # Parcel/melee-grading cards report a TRADE RANGE for clarity instead of a
 # single grade (e.g. "VVS-VS", not just "VS"). _looks_like_color_range used a
 # plain substring search, so a trade range like "VVS-VS" or "SI-I" hides a

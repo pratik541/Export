@@ -205,8 +205,13 @@ _WEIGHT_PATTERN_RE = re.compile(r"(\d+\.\d{1,2}\s*carats?)", re.IGNORECASE)
 # letters, then digits, optionally a slash and more digits. The "Style#" label
 # itself is frequently misread beyond recognition ("Stylo#", "Shyios"), so the
 # code's own shape is the reliable anchor; a nearby-label match is tried first
-# for extra precision when the label happens to be legible.
-_STYLE_CODE_TOKEN = r"\b[A-Za-z]{2,5}\d{2,4}(?:/\d{1,3})?\b"
+# for extra precision when the label happens to be legible. The digit run
+# before the slash was capped at 4 (every code seen so far fit within that),
+# but a real code ("AFDRA11501/2") had a 5-digit run -- \d{2,4} can't match
+# that at all (no word boundary exists partway through a contiguous digit
+# run, so it isn't just a truncation, the whole token silently fails to
+# match) -- widened to 6 with headroom for future codes.
+_STYLE_CODE_TOKEN = r"\b[A-Za-z]{2,5}\d{2,6}(?:/\d{1,3})?\b"
 _STYLE_ANCHORED = re.compile(
     r"styl\w*\s*#?[^\n]{0,20}?(" + _STYLE_CODE_TOKEN + r")", re.IGNORECASE
 )
