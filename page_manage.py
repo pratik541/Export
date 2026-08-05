@@ -15,6 +15,7 @@ from streamlit_cropper import st_cropper
 
 import db
 import excel_export
+import sheets_db
 from ui_common import (
     add_image as _add_image, item_by_id as _item_by_id, run_ocr as _run_ocr,
     autosave as _autosave, delete_item as _delete_item, item_status as _item_status,
@@ -270,6 +271,7 @@ def render():
                     c1, c2 = st.columns(2)
                     if c1.button("Yes, delete all", type="primary", key="confirm_delete_all_btn"):
                         db.delete_all()
+                        sheets_db.delete_all()
                         st.session_state.confirm_delete_all = False
                         if db.fetch_all():  # rows still there -> the delete had no effect
                             st.warning("Delete had no effect — add the delete policy in Supabase (see README).")
@@ -287,6 +289,7 @@ def render():
                     rcol.write(f"{igi} · {row.get('shape') or '—'} · {row.get('carat') or '—'} ct")
                     if bcol.button(":material/delete:", key=f"del_saved_{igi}", help="Delete this record"):
                         db.delete_one(igi)
+                        sheets_db.delete_one(igi)
                         st.rerun()
 
     # --- Saved jewelry records (shared Supabase store) ---
@@ -321,6 +324,7 @@ def render():
                     c1, c2 = st.columns(2)
                     if c1.button("Yes, delete all", type="primary", key="confirm_delete_all_jewelry_btn"):
                         db.delete_all_jewelry()
+                        sheets_db.delete_all_jewelry()
                         st.session_state.confirm_delete_all_jewelry = False
                         if db.fetch_all_jewelry():  # rows still there -> the delete had no effect
                             st.warning("Delete had no effect — add the delete policy in Supabase (see README).")
@@ -338,4 +342,5 @@ def render():
                     rcol.write(f"{report_no} · {row.get('shape_cut') or '—'} · {row.get('est_weight') or '—'}")
                     if bcol.button(":material/delete:", key=f"del_jewelry_{report_no}", help="Delete this record"):
                         db.delete_one_jewelry(report_no)
+                        sheets_db.delete_one_jewelry(report_no)
                         st.rerun()
