@@ -236,6 +236,7 @@ the export."
 | `decoding.py` | Barcode/QR decoding via `pyzbar` |
 | `excel_export.py` | Builds the downloadable `.xlsx` from the results table (used for both the diamond and jewelry results/saved-records tables) |
 | `db.py` | Optional Supabase central store: upsert-save accepted scans, fetch shared records, `delete_one`/`delete_all` for `tag_scans`; `save_jewelry_scan`, `fetch_all_jewelry`, `delete_one_jewelry`/`delete_all_jewelry` for the separate `jewelry_scans` table; no-ops when unconfigured |
+| `sheets_db.py` | Optional Google Sheets shadow store, run alongside `db.py`'s Supabase store: `is_enabled()`, `save_scan`/`save_jewelry_scan` (upsert via find-row-then-update-or-append), `fetch_all`/`fetch_all_jewelry` (not yet wired into any read path), `delete_one`/`delete_one_jewelry`, `delete_all`/`delete_all_jewelry` (resize to the header row). Same never-raises, degrades-safely contract as `db.py`; dormant until `st.secrets["gsheets"]` is configured |
 
 ### The `ocr/` package
 

@@ -335,10 +335,10 @@ touches it when the "Jewelry card" card type is selected.
 - The "Saved records" section reads the shared table directly (not just this
   session's captures) and offers an export-all-to-Excel button.
 - Each saved record can be deleted individually, and the whole table can be
-  cleared with a type-to-confirm "Delete all" (you must type `DELETE` before
-  it runs). Both are **permanent, shared deletes** — they remove data from
-  the Supabase table for every device reading it, not just the current
-  session, and there is no undo.
+  cleared with a "Yes, delete all" / "No, cancel" confirmation. Both are
+  **permanent, shared deletes** — they remove data from the Supabase table
+  for every device reading it, not just the current session, and there is
+  no undo.
 - The delete RLS policy above is required for either delete to actually take
   effect — without it, the request succeeds at the API level but removes
   nothing. The app can't detect this for a single-row delete, but "Delete
@@ -353,9 +353,71 @@ touches it when the "Jewelry card" card type is selected.
   feature existed.
 - Jewelry-card scans get their own "Saved jewelry records" section (Manage
   page), reading `jewelry_scans` and offering the same export-all-to-Excel /
-  per-row delete / type-to-confirm "Delete all" as the diamond-tag "Saved
+  per-row delete / Yes-No-confirmed "Delete all" as the diamond-tag "Saved
   records" section above — just against the separate table, upserted on
   `report_no` instead of `igi_report_no`.
+
+## Google Sheets shadow store (optional, in progress)
+
+Alongside Supabase, this app can also write every accepted scan to a Google
+Sheet as an independent, best-effort background copy — **not yet a
+replacement for Supabase**. The "Saved records" tables you see in the app
+still read from Supabase only; Sheets is purely a write-side safety net for
+now, useful for evaluating Sheets as a free alternative without touching
+anything that currently works.
+
+### 1. Create the spreadsheet and a service account
+
+1. Create a new Google Sheet. Add two tabs (rename the default "Sheet1" and
+   add a second): `tag_scans` and `jewelry_scans`.
+2. Add a header row to each tab, in this exact column order:
+   - `tag_scans`: `igi_report_no, report_type, shape, carat, color, clarity, needs_review, source, scanned_at`
+   - `jewelry_scans`: `report_no, shape_cut, est_weight, color, clarity, style_no, needs_review, source, scanned_at`
+3. In the [Google Cloud Console](https://console.cloud.google.com/), create
+   (or reuse) a project, enable the **Google Sheets API**, then create a
+   **Service Account** and download its JSON key.
+4. Share the spreadsheet (the "Share" button, same as sharing with a person)
+   with the service account's email address (looks like
+   `something@project-id.iam.gserviceaccount.com`, found in the JSON key)
+   with **Editor** access.
+5. Copy the spreadsheet ID from its URL:
+   `https://docs.google.com/spreadsheets/d/`**`THIS_PART`**`/edit`.
+
+### 2. Configure secrets
+
+- **Local setup**: add a `[gsheets]` block to `.streamlit/secrets.toml`:
+  ```toml
+  [gsheets]
+  spreadsheet_id = "your-spreadsheet-id"
+  service_account = """
+  {...paste the full contents of the downloaded JSON key here...}
+  """
+  ```
+- **Streamlit Cloud**: paste the same `[gsheets]` block into the app's
+  Settings → Secrets.
+
+Until this is configured, nothing changes: `sheets_db.is_enabled()` is
+`False` and every Sheets call is a no-op, exactly like Supabase's own
+optional-by-default behavior.
+
+### Behavior notes
+
+- Every accepted scan that saves to Supabase (or would, if Supabase were
+  enabled) also saves to the matching Sheets tab, upserted on the same key
+  (`igi_report_no` / `report_no`) by finding the existing row and updating
+  it in place, or appending a new one if not found — Sheets has no native
+  upsert, so this is done by lookup.
+- Deleting a record (per-row or "Delete all") in the app also deletes it
+  from the matching Sheets tab, so Sheets doesn't grow into a permanent
+  archive that never reflects what you've actually deleted.
+- Sheets failures are silent and never affect the app's Supabase-driven
+  "saved" indicator — this is a background copy, not a second thing you
+  need to watch for errors on.
+- Google Sheets' free-tier API quota (100 requests/100 seconds/user) is
+  generous for this app's scan volume but not unlimited; an occasional
+  transient quota error during heavy "OCR all" batches would surface the
+  same way any other Sheets failure does — silently, with Supabase
+  unaffected.
 
 ## Known limitations
 
