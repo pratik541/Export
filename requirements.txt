@@ -1,4 +1,14 @@
 streamlit==1.59.2
+# Pinned explicitly, not just left as a transitive dep of streamlit: Starlette
+# 1.4.0 (released 2026-08-05) added a new REQUIRED keyword-only argument
+# (thread_minimum_size) to its internal GZipResponder class. Streamlit 1.59.2
+# (and 1.60.0, checked directly) vendors a subclass of that exact class
+# without passing the new argument, so any starlette>=1.4.0 crashes the app
+# at startup with "TypeError: GZipResponder.__init__() missing 1 required
+# keyword-only argument: 'thread_minimum_size'". Pinning to the last known-good
+# release avoids a fresh deploy silently resolving the breaking one -- same
+# reason paddlex is pinned exactly below.
+starlette==1.3.1
 paddlepaddle==3.3.1
 paddleocr==3.7.0
 paddlex==3.7.2
