@@ -3,7 +3,7 @@ result card that fits on a phone screen without scrolling to verify the reading.
 Falls back to a basic camera if the rear-camera component is unavailable."""
 import streamlit as st
 
-import db
+import sheets_db
 import ui_common
 
 try:
@@ -51,10 +51,10 @@ def _render_result_card(item):
     if r and r.get("accepted"):
         for field, label in labels:
             st.markdown(f"**{label}:** {r.get(field) or '—'}")
-    if db.is_enabled():
+    if sheets_db.is_enabled():
         saved = item.get("saved_ok")
         if saved is True:
-            st.caption("☁ saved to database")
+            st.caption("☁ saved to Google Sheets")
         elif saved is False:
             st.caption("⚠ save failed — kept locally")
     if r and r.get("raw_ocr_text"):

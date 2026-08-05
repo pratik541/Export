@@ -235,8 +235,8 @@ the export."
 | `imaging.py` | OpenCV preprocessing (grayscale, denoise, adaptive threshold) — used for barcode/QR decoding only; also `crop_to_label`/`label_crop_box` (the barcode-anchored auto-crop), `center_box_crop` (the parameterized guide-box crop) and `guide_box_crop(image, card_type)` (picks diamond vs. jewelry geometry), and the `GUIDE_BOX_WIDTH_FRAC`/`GUIDE_BOX_ASPECT`/`GUIDE_BOX_CENTER_Y_FRAC` and `JEWELRY_GUIDE_BOX_WIDTH_FRAC`/`_ASPECT`/`_CENTER_Y_FRAC` constants defining each box's geometry — all used by `capture.py` |
 | `decoding.py` | Barcode/QR decoding via `pyzbar` |
 | `excel_export.py` | Builds the downloadable `.xlsx` from the results table (used for both the diamond and jewelry results/saved-records tables) |
-| `db.py` | Optional Supabase central store: upsert-save accepted scans, fetch shared records, `delete_one`/`delete_all` for `tag_scans`; `save_jewelry_scan`, `fetch_all_jewelry`, `delete_one_jewelry`/`delete_all_jewelry` for the separate `jewelry_scans` table; no-ops when unconfigured |
-| `sheets_db.py` | Optional Google Sheets shadow store, run alongside `db.py`'s Supabase store: `is_enabled()`, `save_scan`/`save_jewelry_scan` (upsert via find-row-then-update-or-append), `fetch_all`/`fetch_all_jewelry` (not yet wired into any read path), `delete_one`/`delete_one_jewelry`, `delete_all`/`delete_all_jewelry` (resize to the header row). Same never-raises, degrades-safely contract as `db.py`; dormant until `st.secrets["gsheets"]` is configured |
+| `db.py` | Supabase central store: upsert-save accepted scans, fetch shared records, `delete_one`/`delete_all` for `tag_scans`; `save_jewelry_scan`, `fetch_all_jewelry`, `delete_one_jewelry`/`delete_all_jewelry` for the separate `jewelry_scans` table; no-ops when unconfigured. **Disconnected**: kept in the codebase, fully tested, but no longer called from `page_manage.py`/`page_scan.py`/`ui_common.py` — the app now uses `sheets_db.py` instead |
+| `sheets_db.py` | Google Sheets central store — **the app's active store**: `is_enabled()`, `save_scan`/`save_jewelry_scan` (upsert via find-row-then-update-or-append, since Sheets has no native upsert), `fetch_all`/`fetch_all_jewelry` (now the read source for the "Saved records" sections), `delete_one`/`delete_one_jewelry`, `delete_all`/`delete_all_jewelry` (resize to the header row). Same never-raises, degrades-safely contract as `db.py`; dormant until `st.secrets["gsheets"]` is configured |
 
 ### The `ocr/` package
 
@@ -372,6 +372,14 @@ sorted left-to-right — this is what lets the same line-based `ocr/parsing.py`
 logic work regardless of engine.
 
 ## Central store (optional)
+
+**Status: this section describes `db.py`/Supabase, which is currently
+disconnected from the running app.** The app was switched over to
+`sheets_db.py`/Google Sheets as its sole central store (same shape of
+functions, same optional/degrades-safely contract, described in the Modules
+table above). `db.py` is preserved here, unmodified and fully tested, in
+case of a future revert — the description below remains accurate as a
+description of `db.py` itself, just not of what the app currently calls.
 
 `db.py` wraps an optional Supabase table (`tag_scans`) that, when configured,
 gives the app a shared, cross-session store on top of the per-session flow

@@ -1,8 +1,13 @@
 """Manage page: the full desktop scanner UI — upload, camera, gallery, results
-table + Excel export, and the shared Supabase saved-records view. Behavior is
-identical to the original single-page app; it was relocated here so the app can
-also offer a compact mobile Scan page. All the logic lives in ui_common; this
-module is presentation only."""
+table + Excel export, and the shared Google Sheets saved-records view. Behavior
+is identical to the original single-page app; it was relocated here so the app
+can also offer a compact mobile Scan page. All the logic lives in ui_common;
+this module is presentation only.
+
+Supabase (db.py) is no longer wired into this page -- the app was switched
+over to Google Sheets (sheets_db.py) as its sole central store. db.py is kept
+in the codebase, fully tested and working, in case of a future revert; it's
+just not called here anymore."""
 import io
 from datetime import datetime
 
@@ -13,7 +18,6 @@ import streamlit as st
 from PIL import Image
 from streamlit_cropper import st_cropper
 
-import db
 import excel_export
 import sheets_db
 from ui_common import (
@@ -96,10 +100,10 @@ def render():
                         ),
                         hide_index=True, width="stretch",
                     )
-                if db.is_enabled():
+                if sheets_db.is_enabled():
                     saved = latest.get("saved_ok")
                     if saved is True:
-                        st.caption("☁ saved to database")
+                        st.caption("☁ saved to Google Sheets")
                     elif saved is False:
                         st.caption("⚠ save failed — kept locally")
             rc1, rc2, rc3 = st.columns(3)
@@ -239,16 +243,16 @@ def render():
     elif not items:
         st.info("Upload or capture tag photos to get started.")
 
-    # --- Saved records (shared Supabase store) ---
-    if db.is_enabled():
+    # --- Saved records (shared Google Sheets store) ---
+    if sheets_db.is_enabled():
         with st.container(border=True):
             header_col, refresh_col = st.columns([3, 1])
             header_col.subheader(":material/cloud: Saved records (shared)")
             if refresh_col.button(":material/refresh: Refresh"):
                 st.rerun()
-            rows = db.fetch_all()
+            rows = sheets_db.fetch_all()
             if not rows:
-                st.caption("No saved records yet (or couldn't reach the database).")
+                st.caption("No saved records yet (or couldn't reach the sheet).")
             else:
                 saved_df = pd.DataFrame(rows)
                 st.dataframe(saved_df, hide_index=True, width="stretch")
@@ -270,11 +274,10 @@ def render():
                     st.error("This permanently deletes ALL saved records for everyone. Are you sure?")
                     c1, c2 = st.columns(2)
                     if c1.button("Yes, delete all", type="primary", key="confirm_delete_all_btn"):
-                        db.delete_all()
                         sheets_db.delete_all()
                         st.session_state.confirm_delete_all = False
-                        if db.fetch_all():  # rows still there -> the delete had no effect
-                            st.warning("Delete had no effect — add the delete policy in Supabase (see README).")
+                        if sheets_db.fetch_all():  # rows still there -> the delete had no effect
+                            st.warning("Delete had no effect — check the sheet is shared with the service account.")
                         else:
                             st.toast("All saved records deleted", icon=":material/delete_forever:")
                             st.rerun()
@@ -288,20 +291,19 @@ def render():
                     rcol, bcol = st.columns([4, 1])
                     rcol.write(f"{igi} · {row.get('shape') or '—'} · {row.get('carat') or '—'} ct")
                     if bcol.button(":material/delete:", key=f"del_saved_{igi}", help="Delete this record"):
-                        db.delete_one(igi)
                         sheets_db.delete_one(igi)
                         st.rerun()
 
-    # --- Saved jewelry records (shared Supabase store) ---
-    if db.is_enabled():
+    # --- Saved jewelry records (shared Google Sheets store) ---
+    if sheets_db.is_enabled():
         with st.container(border=True):
             header_col, refresh_col = st.columns([3, 1])
             header_col.subheader(":material/cloud: Saved jewelry records (shared)")
             if refresh_col.button(":material/refresh: Refresh", key="refresh_jewelry"):
                 st.rerun()
-            jewelry_rows = db.fetch_all_jewelry()
+            jewelry_rows = sheets_db.fetch_all_jewelry()
             if not jewelry_rows:
-                st.caption("No saved records yet (or couldn't reach the database).")
+                st.caption("No saved records yet (or couldn't reach the sheet).")
             else:
                 jewelry_df = pd.DataFrame(jewelry_rows)
                 st.dataframe(jewelry_df, hide_index=True, width="stretch")
@@ -323,11 +325,10 @@ def render():
                     st.error("This permanently deletes ALL saved jewelry records for everyone. Are you sure?")
                     c1, c2 = st.columns(2)
                     if c1.button("Yes, delete all", type="primary", key="confirm_delete_all_jewelry_btn"):
-                        db.delete_all_jewelry()
                         sheets_db.delete_all_jewelry()
                         st.session_state.confirm_delete_all_jewelry = False
-                        if db.fetch_all_jewelry():  # rows still there -> the delete had no effect
-                            st.warning("Delete had no effect — add the delete policy in Supabase (see README).")
+                        if sheets_db.fetch_all_jewelry():  # rows still there -> the delete had no effect
+                            st.warning("Delete had no effect — check the sheet is shared with the service account.")
                         else:
                             st.toast("All saved jewelry records deleted", icon=":material/delete_forever:")
                             st.rerun()
@@ -341,6 +342,5 @@ def render():
                     rcol, bcol = st.columns([4, 1])
                     rcol.write(f"{report_no} · {row.get('shape_cut') or '—'} · {row.get('est_weight') or '—'}")
                     if bcol.button(":material/delete:", key=f"del_jewelry_{report_no}", help="Delete this record"):
-                        db.delete_one_jewelry(report_no)
                         sheets_db.delete_one_jewelry(report_no)
                         st.rerun()

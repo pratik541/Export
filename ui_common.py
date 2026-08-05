@@ -2,14 +2,17 @@
 
 Both the Manage page (full desktop app) and the Scan page (mobile) import from
 here. These helpers are the common vocabulary for adding images, running OCR,
-auto-saving to Supabase, deleting, and rendering per-item status. They read and
-write st.session_state exactly as the original single-page app did."""
+auto-saving to Google Sheets, deleting, and rendering per-item status. They
+read and write st.session_state exactly as the original single-page app did.
+
+Supabase (db.py) is no longer called from here -- the app was switched over
+to Google Sheets (sheets_db.py) as its sole central store. db.py is kept in
+the codebase, fully tested and working, in case of a future revert."""
 import hashlib
 
 import streamlit as st
 
 import capture
-import db
 import sheets_db
 from ocr import pipeline
 
@@ -122,13 +125,13 @@ def run_ocr(item):
 
 
 def autosave(item):
-    """Auto-save an accepted, key-bearing scan. Supabase remains the primary,
-    user-visible store: item["saved_ok"] (drives the saved-indicator)
-    reflects ONLY its result, exactly as before. Google Sheets, if
-    configured, saves the same scan as an independent, silent background
-    copy -- its result is never surfaced and never affects
-    item["saved_ok"], so it can't introduce a new user-visible failure mode.
-    Routes to the jewelry or diamond table/worksheet by card_type."""
+    """Auto-save an accepted, key-bearing scan to the Google Sheets central
+    store. item["saved_ok"] (drives the "saved" indicator) reflects Sheets'
+    result. Supabase (db.py) is intentionally not called here: the app has
+    been switched over to use Google Sheets as its sole central store. db.py
+    itself is untouched and still fully tested -- kept in the codebase in
+    case of a future revert, just not wired into this flow. Routes to the
+    jewelry or diamond worksheet by card_type."""
     r = item.get("ocr_result")
     if not (r and r.get("accepted")):
         return
@@ -136,16 +139,11 @@ def autosave(item):
     key = r.get("report_no") if is_jewelry else r.get("igi_report_no")
     if not key:
         return
-    if db.is_enabled():
-        if is_jewelry:
-            item["saved_ok"] = db.save_jewelry_scan(r, item["source"])
-        else:
-            item["saved_ok"] = db.save_scan(r, item["source"])
     if sheets_db.is_enabled():
         if is_jewelry:
-            sheets_db.save_jewelry_scan(r, item["source"])
+            item["saved_ok"] = sheets_db.save_jewelry_scan(r, item["source"])
         else:
-            sheets_db.save_scan(r, item["source"])
+            item["saved_ok"] = sheets_db.save_scan(r, item["source"])
 
 
 def delete_item(item_id):

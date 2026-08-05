@@ -130,7 +130,7 @@ def test_delete_keeps_hash_so_widget_cannot_readd():
     assert h1 in at.session_state["seen_hashes"]  # its hash kept -> can't reappear
 
 
-def test_app_hides_saved_records_when_db_disabled():
+def test_app_hides_saved_records_when_sheets_disabled():
     at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
     at.run()
     assert not at.exception
@@ -149,19 +149,19 @@ _SAVED_ROW = [
 
 
 def test_saved_records_per_row_delete_calls_delete_one(monkeypatch):
-    import db
+    import sheets_db
     calls = []
-    monkeypatch.setattr(db, "is_enabled", lambda: True)
-    monkeypatch.setattr(db, "fetch_all", lambda: list(_SAVED_ROW))
-    monkeypatch.setattr(db, "delete_all", lambda: True)
-    monkeypatch.setattr(db, "delete_one", lambda igi: calls.append(igi) or True)
+    monkeypatch.setattr(sheets_db, "is_enabled", lambda: True)
+    monkeypatch.setattr(sheets_db, "fetch_all", lambda: list(_SAVED_ROW))
+    monkeypatch.setattr(sheets_db, "delete_all", lambda: True)
+    monkeypatch.setattr(sheets_db, "delete_one", lambda igi: calls.append(igi) or True)
     at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
     at.run()
     assert not at.exception
     all_sub = " ".join(el.value for el in at.get("subheader")) if at.get("subheader") else ""
     assert "Saved records" in all_sub          # section actually rendered
     at.button(key="del_saved_809614206").click().run()
-    assert calls == ["809614206"]              # per-row delete really called db.delete_one
+    assert calls == ["809614206"]              # per-row delete really called sheets_db.delete_one
 
 
 def test_manage_card_type_radio_exists():
@@ -182,59 +182,38 @@ _JEWELRY_ROW = [
 
 
 def test_saved_jewelry_records_per_row_delete_calls_delete_one_jewelry(monkeypatch):
-    import db
+    import sheets_db
     calls = []
-    monkeypatch.setattr(db, "is_enabled", lambda: True)
-    monkeypatch.setattr(db, "fetch_all", lambda: [])
-    monkeypatch.setattr(db, "delete_all", lambda: True)
-    monkeypatch.setattr(db, "delete_one", lambda igi: True)
-    monkeypatch.setattr(db, "fetch_all_jewelry", lambda: list(_JEWELRY_ROW))
-    monkeypatch.setattr(db, "delete_all_jewelry", lambda: True)
-    monkeypatch.setattr(db, "delete_one_jewelry", lambda report_no: calls.append(report_no) or True)
+    monkeypatch.setattr(sheets_db, "is_enabled", lambda: True)
+    monkeypatch.setattr(sheets_db, "fetch_all", lambda: [])
+    monkeypatch.setattr(sheets_db, "delete_all", lambda: True)
+    monkeypatch.setattr(sheets_db, "delete_one", lambda igi: True)
+    monkeypatch.setattr(sheets_db, "fetch_all_jewelry", lambda: list(_JEWELRY_ROW))
+    monkeypatch.setattr(sheets_db, "delete_all_jewelry", lambda: True)
+    monkeypatch.setattr(sheets_db, "delete_one_jewelry", lambda report_no: calls.append(report_no) or True)
     at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
     at.run()
     assert not at.exception
     all_sub = " ".join(el.value for el in at.get("subheader")) if at.get("subheader") else ""
     assert "Saved jewelry records" in all_sub          # section actually rendered
     at.button(key="del_jewelry_J12345").click().run()
-    assert calls == ["J12345"]                          # per-row delete really called db.delete_one_jewelry
+    assert calls == ["J12345"]                          # per-row delete really called sheets_db.delete_one_jewelry
 
 
 def test_delete_all_requires_yes_no_confirmation(monkeypatch):
-    import db
     import sheets_db
     n = {"count": 0}
-    sheets_n = {"count": 0}
-    monkeypatch.setattr(db, "is_enabled", lambda: True)
-    monkeypatch.setattr(db, "fetch_all", lambda: list(_SAVED_ROW))
-    monkeypatch.setattr(db, "delete_one", lambda igi: True)
-    monkeypatch.setattr(db, "delete_all", lambda: (n.__setitem__("count", n["count"] + 1), True)[1])
-    monkeypatch.setattr(sheets_db, "delete_all",
-                        lambda: (sheets_n.__setitem__("count", sheets_n["count"] + 1), True)[1])
+    monkeypatch.setattr(sheets_db, "is_enabled", lambda: True)
+    monkeypatch.setattr(sheets_db, "fetch_all", lambda: list(_SAVED_ROW))
+    monkeypatch.setattr(sheets_db, "delete_one", lambda igi: True)
+    monkeypatch.setattr(sheets_db, "delete_all", lambda: (n.__setitem__("count", n["count"] + 1), True)[1])
     at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
     at.run()
     at.button(key="delete_all_saved").click().run()                    # reveal confirm box
     at.button(key="cancel_delete_all").click().run()
     assert n["count"] == 0                                             # "No" -> no delete
-    assert sheets_n["count"] == 0
     assert not at.session_state["confirm_delete_all"]
     at.button(key="delete_all_saved").click().run()                    # reveal confirm box again
     at.button(key="confirm_delete_all_btn").click().run()
     assert n["count"] == 1                                             # "Yes" -> delete fires
-    assert sheets_n["count"] == 1                                       # ... on both stores
     assert not at.exception
-
-
-def test_saved_records_per_row_delete_also_calls_sheets_delete_one(monkeypatch):
-    import db
-    import sheets_db
-    sheets_calls = []
-    monkeypatch.setattr(db, "is_enabled", lambda: True)
-    monkeypatch.setattr(db, "fetch_all", lambda: list(_SAVED_ROW))
-    monkeypatch.setattr(db, "delete_all", lambda: True)
-    monkeypatch.setattr(db, "delete_one", lambda igi: True)
-    monkeypatch.setattr(sheets_db, "delete_one", lambda igi: sheets_calls.append(igi) or True)
-    at = AppTest.from_file("tests/harness_manage.py", default_timeout=120)
-    at.run()
-    at.button(key="del_saved_809614206").click().run()
-    assert sheets_calls == ["809614206"]

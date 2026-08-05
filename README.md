@@ -241,7 +241,17 @@ can select. No app configuration is needed for this.
    or reverting to the lighter (but less accurate) Tesseract-based approach
    from an earlier point in this project's history.
 
-## Central database (optional)
+## Central database — Supabase (disconnected, kept for reference)
+
+**This app no longer calls Supabase.** It was switched over to Google Sheets
+(below) as its sole central store. This section, `db.py`, and its tests are
+kept in the codebase, fully working and fully tested, in case of a future
+revert — but nothing in `page_manage.py`, `page_scan.py`, or `ui_common.py`
+imports or calls `db.py` anymore. If you're setting this app up fresh, skip
+straight to the "Google Sheets" section below.
+
+The rest of this section is preserved as-was, describing how it worked while
+it was connected:
 
 By default this app has no database: everything lives in the browser session,
 as described above. You can optionally connect it to a shared
@@ -357,14 +367,18 @@ touches it when the "Jewelry card" card type is selected.
   records" section above — just against the separate table, upserted on
   `report_no` instead of `igi_report_no`.
 
-## Google Sheets shadow store (optional, in progress)
+## Central database — Google Sheets (optional, currently connected)
 
-Alongside Supabase, this app can also write every accepted scan to a Google
-Sheet as an independent, best-effort background copy — **not yet a
-replacement for Supabase**. The "Saved records" tables you see in the app
-still read from Supabase only; Sheets is purely a write-side safety net for
-now, useful for evaluating Sheets as a free alternative without touching
-anything that currently works.
+**This is the app's active central store.** Every accepted scan (one with a
+readable key) is automatically saved to a Google Sheet, and the "Saved
+records" / "Saved jewelry records" sections in the app read that same sheet
+back and export it to Excel. **This is entirely optional** — without
+`[gsheets]` secrets configured, the app runs exactly as before, with no
+database section shown and no behavior change.
+
+(This started as an independent write-side shadow copy alongside Supabase,
+evaluated risk-free before cutting over — see the Supabase section above for
+that history. The app has since been switched to use Sheets exclusively.)
 
 ### 1. Create the spreadsheet and a service account
 
@@ -402,22 +416,32 @@ optional-by-default behavior.
 
 ### Behavior notes
 
-- Every accepted scan that saves to Supabase (or would, if Supabase were
-  enabled) also saves to the matching Sheets tab, upserted on the same key
-  (`igi_report_no` / `report_no`) by finding the existing row and updating
-  it in place, or appending a new one if not found — Sheets has no native
-  upsert, so this is done by lookup.
-- Deleting a record (per-row or "Delete all") in the app also deletes it
-  from the matching Sheets tab, so Sheets doesn't grow into a permanent
-  archive that never reflects what you've actually deleted.
-- Sheets failures are silent and never affect the app's Supabase-driven
-  "saved" indicator — this is a background copy, not a second thing you
-  need to watch for errors on.
+- Each accepted scan auto-upserts into the `tag_scans` (or `jewelry_scans`)
+  tab, keyed on `igi_report_no` / `report_no` — found by looking up the
+  existing row and updating it in place, or appending a new one if not
+  found (Sheets has no native upsert the way Postgres does).
+- Rows without a readable key are kept local-only in that session's results
+  table; they are never saved to the sheet (there's no key to upsert on).
+- The "Saved records" section reads the sheet directly (not just this
+  session's captures) and offers an export-all-to-Excel button.
+- Each saved record can be deleted individually, and the whole tab can be
+  cleared with a "Yes, delete all" / "No, cancel" confirmation. Both are
+  **permanent, shared deletes** — they remove data from the sheet for
+  everyone reading it, not just the current session, and there is no undo.
+- Failures here are currently silent (no logging) — if `is_enabled()` is
+  unexpectedly `False` after configuring secrets, or a save/delete doesn't
+  seem to be landing, double check: the spreadsheet ID is correct, the tab
+  names are exactly `tag_scans`/`jewelry_scans` (case-sensitive), the header
+  row matches the column order above exactly, and the sheet has been shared
+  with the service account's `client_email` with Editor access.
 - Google Sheets' free-tier API quota (100 requests/100 seconds/user) is
   generous for this app's scan volume but not unlimited; an occasional
-  transient quota error during heavy "OCR all" batches would surface the
-  same way any other Sheets failure does — silently, with Supabase
-  unaffected.
+  transient quota error during heavy "OCR all" batches surfaces the same way
+  any other failure here does — silently, with the scan itself unaffected
+  (only the save to the sheet is skipped).
+- If Google Sheets isn't configured (no `[gsheets]` secrets present), the
+  database features are simply hidden and the app behaves exactly as it did
+  before this feature existed.
 
 ## Known limitations
 
