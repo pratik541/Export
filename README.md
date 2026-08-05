@@ -389,9 +389,9 @@ anything that currently works.
   ```toml
   [gsheets]
   spreadsheet_id = "your-spreadsheet-id"
-  service_account = """
+  service_account = '''
   {...paste the full contents of the downloaded JSON key here...}
-  """
+  '''
   ```
 - **Streamlit Cloud**: paste the same `[gsheets]` block into the app's
   Settings → Secrets.

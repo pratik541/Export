@@ -25,7 +25,7 @@ _COLUMNS = ("igi_report_no", "report_type", "shape", "carat", "color", "clarity"
 _JEWELRY_COLUMNS = ("report_no", "shape_cut", "est_weight", "color", "clarity", "style_no", "needs_review")
 
 
-@st.cache_resource
+@st.cache_resource(ttl=600)
 def get_client():
     """Build and cache the opened Google Spreadsheet from st.secrets, or None
     if unconfigured/unbuildable. Returns the Spreadsheet (not the raw gspread
@@ -42,6 +42,7 @@ def get_client():
         return None
     try:
         client = gspread.service_account_from_dict(info)
+        client.set_timeout(10)
         return client.open_by_key(spreadsheet_id)
     except Exception:
         return None
