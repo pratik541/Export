@@ -109,6 +109,35 @@ def test_multi_word_piece_names_are_parsed_correctly():
     assert "EAR RING-03 PCS, NOSE PIN-02 PCS" in categories[1]["description"]
 
 
+def test_bare_pendant_piece_becomes_chwithpd_when_header_says_chain_with_pendant():
+    # Real-world case (JNE019 category [04]): the category header spells out
+    # "...CHAIN WITH PENDANT...", but the piece breakdown itself just says
+    # "PENDANT" -- in that category, a bare "PENDANT" piece means a
+    # chain-with-pendant set, and should render as "CHWITHPD" in the
+    # description (the header phrase itself is left untouched).
+    cells = dict(_TWO_CATEGORY_CELLS)
+    cells[(11, "A")] = (
+        "[02] 10KTGOLD JEWELLERY STUDDED WITH LABORATORY GROWN DIAMOND "
+        "WITH 10KT PLAIN GOLD CHAIN WITH PENDANT (MECHANIZED)"
+    )
+    cells[(12, "E")] = "(  2 PENDANT (Pcs) )"
+
+    categories = packing_list.parse_packing_list(_write(cells))
+
+    assert "CHAIN WITH PENDANT (MECH), CHWITHPD-02 PCS" in categories[1]["description"]
+    assert "PENDANT-02 PCS" not in categories[1]["description"]
+
+
+def test_bare_pendant_piece_is_left_alone_without_chain_with_pendant_in_header():
+    cells = dict(_TWO_CATEGORY_CELLS)
+    cells[(12, "E")] = "(  2 PENDANT (Pcs) )"
+
+    categories = packing_list.parse_packing_list(_write(cells))
+
+    assert "PENDANT-02 PCS" in categories[1]["description"]
+    assert "CHWITHPD" not in categories[1]["description"]
+
+
 def test_missing_subtotal_value_raises_parse_error():
     cells = dict(_TWO_CATEGORY_CELLS)
     del cells[(10, "AA")]

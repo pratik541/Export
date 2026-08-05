@@ -41,6 +41,8 @@ _ABBREVIATIONS = [
     (re.compile(r"\(MECHANIZED\)", re.IGNORECASE), "(MECH)"),
 ]
 
+_CHAIN_WITH_PENDANT_RE = re.compile(r"CHAIN WITH PENDANT", re.IGNORECASE)
+
 
 class PackingListParseError(ValueError):
     """Raised when a category block has no identifiable subtotal row."""
@@ -181,8 +183,10 @@ def _finalize_category(current: dict, col: dict) -> dict:
             f"Category [{current['number']:02d}] \"{current['header']}\" "
             f"piece breakdown \"{current['piece_breakdown']}\" could not be parsed."
         )
+    header_has_chain_with_pendant = bool(_CHAIN_WITH_PENDANT_RE.search(current["header"]))
     piece_desc = ", ".join(
-        f"{name}-{int(count):02d} {unit.upper()}" for count, name, unit in pieces
+        f"{_normalize_piece_name(name, header_has_chain_with_pendant)}-{int(count):02d} {unit.upper()}"
+        for count, name, unit in pieces
     )
     description = (
         f"{_abbreviate(current['header'])}, {piece_desc}, "
@@ -200,6 +204,12 @@ def _finalize_category(current: dict, col: dict) -> dict:
         "unit_price": fob_value / gross_wt,
         "standard_qty": round(gross_wt / 1000, 2),
     }
+
+
+def _normalize_piece_name(name: str, header_has_chain_with_pendant: bool) -> str:
+    if header_has_chain_with_pendant and name.strip().upper() == "PENDANT":
+        return "CHWITHPD"
+    return name
 
 
 def _abbreviate(header: str) -> str:
