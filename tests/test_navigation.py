@@ -4,11 +4,13 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 import db
+import sheets_db
 
 
 @pytest.fixture(autouse=True)
 def _disable_db(monkeypatch):
     monkeypatch.setattr(db, "get_client", lambda: None)
+    monkeypatch.setattr(sheets_db, "get_client", lambda: None)
 
 
 def test_app_boots_into_manage_by_default():

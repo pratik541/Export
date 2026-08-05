@@ -40,3 +40,74 @@ def test_guide_box_css_jewelry_has_jewelry_dimensions():
 
 def test_guide_box_css_diamond_has_diamond_dimensions():
     assert "78%" in ui_common.guide_box_css("diamond")
+
+
+def test_autosave_writes_to_both_stores_when_both_enabled(monkeypatch):
+    import db
+    import sheets_db
+    db_calls, sheets_calls = [], []
+    monkeypatch.setattr(db, "is_enabled", lambda: True)
+    monkeypatch.setattr(db, "save_scan", lambda r, source: db_calls.append((r, source)) or True)
+    monkeypatch.setattr(sheets_db, "is_enabled", lambda: True)
+    monkeypatch.setattr(sheets_db, "save_scan", lambda r, source: sheets_calls.append((r, source)) or True)
+    item = {"card_type": "diamond", "source": "camera",
+            "ocr_result": {"accepted": True, "igi_report_no": "809614206"}}
+    ui_common.autosave(item)
+    assert db_calls == [(item["ocr_result"], "camera")]
+    assert sheets_calls == [(item["ocr_result"], "camera")]
+    assert item["saved_ok"] is True
+
+
+def test_autosave_saved_ok_reflects_only_db_result_not_sheets(monkeypatch):
+    import db
+    import sheets_db
+    monkeypatch.setattr(db, "is_enabled", lambda: True)
+    monkeypatch.setattr(db, "save_scan", lambda r, source: True)
+    monkeypatch.setattr(sheets_db, "is_enabled", lambda: True)
+    monkeypatch.setattr(sheets_db, "save_scan", lambda r, source: False)  # sheets "fails"
+    item = {"card_type": "diamond", "source": "camera",
+            "ocr_result": {"accepted": True, "igi_report_no": "809614206"}}
+    ui_common.autosave(item)
+    assert item["saved_ok"] is True   # unaffected by sheets_db failing
+
+
+def test_autosave_writes_to_sheets_even_when_db_disabled(monkeypatch):
+    import db
+    import sheets_db
+    sheets_calls = []
+    monkeypatch.setattr(db, "is_enabled", lambda: False)
+    monkeypatch.setattr(sheets_db, "is_enabled", lambda: True)
+    monkeypatch.setattr(sheets_db, "save_scan", lambda r, source: sheets_calls.append((r, source)) or True)
+    item = {"card_type": "diamond", "source": "camera",
+            "ocr_result": {"accepted": True, "igi_report_no": "809614206"}}
+    ui_common.autosave(item)
+    assert sheets_calls == [(item["ocr_result"], "camera")]
+    assert "saved_ok" not in item   # db disabled -> saved_ok never set
+
+
+def test_autosave_skips_both_stores_when_not_accepted(monkeypatch):
+    import db
+    import sheets_db
+    calls = []
+    monkeypatch.setattr(db, "is_enabled", lambda: True)
+    monkeypatch.setattr(db, "save_scan", lambda r, source: calls.append("db") or True)
+    monkeypatch.setattr(sheets_db, "is_enabled", lambda: True)
+    monkeypatch.setattr(sheets_db, "save_scan", lambda r, source: calls.append("sheets") or True)
+    item = {"card_type": "diamond", "source": "camera", "ocr_result": {"accepted": False}}
+    ui_common.autosave(item)
+    assert calls == []
+
+
+def test_autosave_routes_jewelry_to_jewelry_functions_on_both_stores(monkeypatch):
+    import db
+    import sheets_db
+    db_calls, sheets_calls = [], []
+    monkeypatch.setattr(db, "is_enabled", lambda: True)
+    monkeypatch.setattr(db, "save_jewelry_scan", lambda r, source: db_calls.append("db") or True)
+    monkeypatch.setattr(sheets_db, "is_enabled", lambda: True)
+    monkeypatch.setattr(sheets_db, "save_jewelry_scan", lambda r, source: sheets_calls.append("sheets") or True)
+    item = {"card_type": "jewelry", "source": "camera",
+            "ocr_result": {"accepted": True, "report_no": "J12345"}}
+    ui_common.autosave(item)
+    assert db_calls == ["db"]
+    assert sheets_calls == ["sheets"]

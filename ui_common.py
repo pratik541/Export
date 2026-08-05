@@ -10,6 +10,7 @@ import streamlit as st
 
 import capture
 import db
+import sheets_db
 from ocr import pipeline
 
 FIELD_LABELS = [
@@ -121,18 +122,30 @@ def run_ocr(item):
 
 
 def autosave(item):
-    """Auto-save an accepted, key-bearing scan to Supabase if configured.
-    Records the save outcome ON THE ITEM (item["saved_ok"]: True/False, or absent
-    if saving didn't apply) so the indicator reflects that item, not a stale
-    session-global flag. Routes to the jewelry or diamond table by card_type."""
+    """Auto-save an accepted, key-bearing scan. Supabase remains the primary,
+    user-visible store: item["saved_ok"] (drives the saved-indicator)
+    reflects ONLY its result, exactly as before. Google Sheets, if
+    configured, saves the same scan as an independent, silent background
+    copy -- its result is never surfaced and never affects
+    item["saved_ok"], so it can't introduce a new user-visible failure mode.
+    Routes to the jewelry or diamond table/worksheet by card_type."""
     r = item.get("ocr_result")
-    if not (db.is_enabled() and r and r.get("accepted")):
+    if not (r and r.get("accepted")):
         return
-    if item.get("card_type") == "jewelry":
-        if r.get("report_no"):
+    is_jewelry = item.get("card_type") == "jewelry"
+    key = r.get("report_no") if is_jewelry else r.get("igi_report_no")
+    if not key:
+        return
+    if db.is_enabled():
+        if is_jewelry:
             item["saved_ok"] = db.save_jewelry_scan(r, item["source"])
-    elif r.get("igi_report_no"):
-        item["saved_ok"] = db.save_scan(r, item["source"])
+        else:
+            item["saved_ok"] = db.save_scan(r, item["source"])
+    if sheets_db.is_enabled():
+        if is_jewelry:
+            sheets_db.save_jewelry_scan(r, item["source"])
+        else:
+            sheets_db.save_scan(r, item["source"])
 
 
 def delete_item(item_id):

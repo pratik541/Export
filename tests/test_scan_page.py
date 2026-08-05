@@ -8,6 +8,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 import db
+import sheets_db
 
 HARNESS = "tests/harness_scan.py"
 
@@ -15,6 +16,7 @@ HARNESS = "tests/harness_scan.py"
 @pytest.fixture(autouse=True)
 def _disable_db(monkeypatch):
     monkeypatch.setattr(db, "get_client", lambda: None)
+    monkeypatch.setattr(sheets_db, "get_client", lambda: None)
 
 
 def _png_bytes():
