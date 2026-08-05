@@ -1,7 +1,17 @@
 """Extracts shipment-level fields from the Export Invoice PDF's text (via
 pdfplumber), plus a per-category (RITC, gross weight, FOB cost) list used
 only to cross-check the Packing List's own numbers in builder.py -- never
-as the primary source for those fields."""
+as the primary source for those fields.
+
+Per-category values are extracted from each category's own text block
+(bounded by consecutive "RITC [NN]" headers), not from a flat whole-document
+list zipped to categories by position. A real invoice (JNE019) broke that
+positional zip two ways: a stones-free category has no "Total ... Cost ..."
+line at all, which silently shifted every following category's cost back by
+one; and a gold-rate reference line inserted between "Gross Wt Gms." and its
+value moved the weight off the very next line entirely. Scoping each regex
+to its own category's block means a missing or reformatted value only
+affects that one category (falls back to None) instead of cascading."""
 import re
 from io import BytesIO
 
@@ -17,7 +27,11 @@ _RODTEP_DISCLAIMED_RE = re.compile(r"NOT CLAIM.*?RoDTEP", re.IGNORECASE | re.DOT
 
 _CATEGORY_HEADER_RE = re.compile(r"(\d{8})\s*\[(\d+)\]")
 _CATEGORY_COST_RE = re.compile(r"Total\s+\d+\s+[\d.]+\s+[\d,.]+\s+Cost\s+([\d,.]+)")
-_CATEGORY_GROSS_WT_RE = re.compile(r"Gross Wt Gms\.[^\n]*\n([\d.]+)")
+# Anchored on the number immediately before "Net Wt GMS." rather than right
+# after "Gross Wt Gms.", since a rate-reference line can sit between the
+# label and the value -- the number just before the next known section
+# start is reliable regardless of what text precedes it on that line.
+_CATEGORY_GROSS_WT_RE = re.compile(r"([\d.]+)\s*\nNet Wt GMS\.")
 
 
 def extract_text(file_bytes: bytes) -> str:
@@ -32,18 +46,7 @@ def parse_invoice(file_bytes: bytes) -> dict:
         found = pattern.search(text)
         return found.group(1) if found else None
 
-    ritc_headers = _CATEGORY_HEADER_RE.findall(text)
-    costs = _CATEGORY_COST_RE.findall(text)
-    gross_wts = _CATEGORY_GROSS_WT_RE.findall(text)
-
-    categories = []
-    for i, (ritc, number) in enumerate(ritc_headers):
-        categories.append({
-            "number": int(number),
-            "ritc": ritc,
-            "cost": float(costs[i].replace(",", "")) if i < len(costs) else None,
-            "gross_wt": float(gross_wts[i]) if i < len(gross_wts) else None,
-        })
+    categories = _extract_categories(text)
 
     return {
         "invoice_no": _match(_INVOICE_NO_RE),
@@ -55,3 +58,21 @@ def parse_invoice(file_bytes: bytes) -> dict:
         "rodtep": "NO" if _RODTEP_DISCLAIMED_RE.search(text) else "YES",
         "categories": categories,
     }
+
+
+def _extract_categories(text: str) -> list[dict]:
+    headers = list(_CATEGORY_HEADER_RE.finditer(text))
+    categories = []
+    for i, header_match in enumerate(headers):
+        block_end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
+        block = text[header_match.start():block_end]
+
+        cost_match = _CATEGORY_COST_RE.search(block)
+        gross_wt_match = _CATEGORY_GROSS_WT_RE.search(block)
+        categories.append({
+            "number": int(header_match.group(2)),
+            "ritc": header_match.group(1),
+            "cost": float(cost_match.group(1).replace(",", "")) if cost_match else None,
+            "gross_wt": float(gross_wt_match.group(1)) if gross_wt_match else None,
+        })
+    return categories
