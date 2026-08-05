@@ -143,3 +143,88 @@ def test_delete_all_returns_false_on_client_error(monkeypatch):
     spreadsheet.worksheet.return_value.resize.side_effect = RuntimeError("x")
     monkeypatch.setattr(sheets_db, "get_client", lambda: spreadsheet)
     assert sheets_db.delete_all() is False
+
+
+def _jewelry_fields(report_no="J12345"):
+    return {
+        "report_no": report_no, "shape_cut": "ROUND BRILLIANT", "est_weight": "1.20",
+        "color": "F", "clarity": "VS2", "style_no": "RG-100", "needs_review": False,
+    }
+
+
+def test_save_jewelry_scan_returns_false_without_report_no(monkeypatch):
+    spreadsheet = MagicMock()
+    monkeypatch.setattr(sheets_db, "get_client", lambda: spreadsheet)
+    fields = _jewelry_fields(report_no=None)
+    assert sheets_db.save_jewelry_scan(fields, "camera") is False
+    spreadsheet.worksheet.assert_not_called()
+
+
+def test_save_jewelry_scan_appends_expected_row(monkeypatch):
+    spreadsheet = MagicMock()
+    worksheet = spreadsheet.worksheet.return_value
+    worksheet.col_values.return_value = ["report_no"]
+    monkeypatch.setattr(sheets_db, "get_client", lambda: spreadsheet)
+
+    assert sheets_db.save_jewelry_scan(_jewelry_fields(), "camera") is True
+
+    spreadsheet.worksheet.assert_called_once_with(sheets_db.JEWELRY_TAB)
+    row = worksheet.append_row.call_args[0][0]
+    assert row[0] == "J12345"
+    assert row[1] == "ROUND BRILLIANT"
+    assert row[2] == "1.20"
+    assert row[3] == "F"
+    assert row[4] == "VS2"
+    assert row[5] == "RG-100"
+    assert row[6] is False
+    assert row[7] == "camera"
+
+
+def test_save_jewelry_scan_returns_false_on_client_error(monkeypatch):
+    spreadsheet = MagicMock()
+    spreadsheet.worksheet.return_value.col_values.side_effect = RuntimeError("x")
+    monkeypatch.setattr(sheets_db, "get_client", lambda: spreadsheet)
+    assert sheets_db.save_jewelry_scan(_jewelry_fields(), "camera") is False
+
+
+def test_fetch_all_jewelry_returns_rows_newest_first(monkeypatch):
+    spreadsheet = MagicMock()
+    spreadsheet.worksheet.return_value.get_all_records.return_value = [
+        {"report_no": "1", "scanned_at": "2026-01-01T00:00:00+00:00"},
+        {"report_no": "2", "scanned_at": "2026-02-01T00:00:00+00:00"},
+    ]
+    monkeypatch.setattr(sheets_db, "get_client", lambda: spreadsheet)
+    rows = sheets_db.fetch_all_jewelry()
+    assert [r["report_no"] for r in rows] == ["2", "1"]
+
+
+def test_fetch_all_jewelry_empty_when_disabled(monkeypatch):
+    monkeypatch.setattr(sheets_db, "get_client", lambda: None)
+    assert sheets_db.fetch_all_jewelry() == []
+
+
+def test_delete_one_jewelry_deletes_matching_row(monkeypatch):
+    spreadsheet = MagicMock()
+    worksheet = spreadsheet.worksheet.return_value
+    worksheet.col_values.return_value = ["report_no", "J12345"]
+    monkeypatch.setattr(sheets_db, "get_client", lambda: spreadsheet)
+    assert sheets_db.delete_one_jewelry("J12345") is True
+    worksheet.delete_rows.assert_called_once_with(2)
+
+
+def test_delete_one_jewelry_returns_false_when_disabled(monkeypatch):
+    monkeypatch.setattr(sheets_db, "get_client", lambda: None)
+    assert sheets_db.delete_one_jewelry("J12345") is False
+
+
+def test_delete_all_jewelry_resizes_to_header_row(monkeypatch):
+    spreadsheet = MagicMock()
+    worksheet = spreadsheet.worksheet.return_value
+    monkeypatch.setattr(sheets_db, "get_client", lambda: spreadsheet)
+    assert sheets_db.delete_all_jewelry() is True
+    worksheet.resize.assert_called_once_with(rows=1)
+
+
+def test_delete_all_jewelry_returns_false_when_disabled(monkeypatch):
+    monkeypatch.setattr(sheets_db, "get_client", lambda: None)
+    assert sheets_db.delete_all_jewelry() is False

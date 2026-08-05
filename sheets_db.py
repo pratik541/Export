@@ -147,3 +147,60 @@ def delete_all() -> bool:
         return True
     except Exception:
         return False
+
+
+def save_jewelry_scan(fields: dict, source: str) -> bool:
+    """Upsert one accepted jewelry scan into the jewelry_scans worksheet,
+    keyed on report_no. Same upsert-by-find-then-update-or-append shape as
+    save_scan."""
+    key = fields.get("report_no")
+    if not key:
+        return False
+    worksheet = _worksheet(JEWELRY_TAB)
+    if worksheet is None:
+        return False
+    row = [_cell(fields, col) for col in _JEWELRY_COLUMNS] + [source, _now_iso()]
+    try:
+        existing_row = _find_row(worksheet, key)
+        if existing_row:
+            worksheet.update([row], range_name=f"A{existing_row}")
+        else:
+            worksheet.append_row(row)
+        return True
+    except Exception:
+        return False
+
+
+def fetch_all_jewelry() -> list:
+    worksheet = _worksheet(JEWELRY_TAB)
+    if worksheet is None:
+        return []
+    try:
+        records = worksheet.get_all_records()
+        return sorted(records, key=lambda r: r.get("scanned_at", ""), reverse=True)
+    except Exception:
+        return []
+
+
+def delete_one_jewelry(report_no: str) -> bool:
+    worksheet = _worksheet(JEWELRY_TAB)
+    if worksheet is None:
+        return False
+    try:
+        row = _find_row(worksheet, report_no)
+        if row:
+            worksheet.delete_rows(row)
+        return True
+    except Exception:
+        return False
+
+
+def delete_all_jewelry() -> bool:
+    worksheet = _worksheet(JEWELRY_TAB)
+    if worksheet is None:
+        return False
+    try:
+        worksheet.resize(rows=1)
+        return True
+    except Exception:
+        return False
