@@ -10,8 +10,14 @@ No Settings UI exists for these in v1 (decision 1) -- if the ERP renames a
 column or a mapping needs to change, edit the values below."""
 
 # KT code -> Fantasy File material codes (C1 slot code, item-name suffix,
-# Metal column value). Matched by exact code after whitespace-compaction --
-# see materials.resolve_fantasy_material.
+# Metal column value). Matched by exact code on the raw (trimmed/uppercased,
+# NOT whitespace-compacted) KT text -- adding a spaceless variant of an
+# existing code (e.g. "14KTY" alongside "14KT Y") does NOT make it match;
+# it needs its own row. Three literal substring special cases in
+# materials.resolve_fantasy_material ("18KTW", "14KTR", "PT") are checked
+# against the whitespace-compacted input before this table lookup runs --
+# see that function's docstring for why they can't be expressed as table
+# rows.
 FANTASY_MATERIAL_MAP = [
     {"code": "925F", "c1": "925F", "suffix": "925F", "metal": "925F"},
     {"code": "925FW", "c1": "925F", "suffix": "925F", "metal": "925F"},
