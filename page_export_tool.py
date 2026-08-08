@@ -38,7 +38,7 @@ def render():
         items = None
         try:
             items, warnings = packing_list.parse_packing_list(packing_list_file.getvalue())
-            jobsheet_index = jobsheet.parse_jobsheet(jobsheet_file.getvalue())
+            jobsheet_index, jobsheet_warnings = jobsheet.parse_jobsheet(jobsheet_file.getvalue())
         except packing_list.PackingListParseError as exc:
             st.error(f"Could not parse the packing list: {exc}")
             items = None
@@ -48,7 +48,7 @@ def render():
 
         if items is not None:
             rows, build_warnings = fantasy_file.build_rows(items, jobsheet_index)
-            st.session_state.export_tool_warnings = warnings + build_warnings
+            st.session_state.export_tool_warnings = warnings + jobsheet_warnings + build_warnings
             st.session_state.export_tool_rows = rows
             st.session_state.export_tool_batch = _extract_batch_code(packing_list_file.name)
 

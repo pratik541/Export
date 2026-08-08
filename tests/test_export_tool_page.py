@@ -29,7 +29,7 @@ def test_generate_button_builds_rows_and_shows_a_download_button(monkeypatch):
             "cert": None, "stones": [],
         }], []),
     )
-    monkeypatch.setattr(jobsheet_module, "parse_jobsheet", lambda b: {})
+    monkeypatch.setattr(jobsheet_module, "parse_jobsheet", lambda b: ({}, []))
 
     at = AppTest.from_file("tests/harness_export_tool.py", default_timeout=120)
     at.run()
@@ -58,7 +58,7 @@ def test_packing_list_parse_failure_shows_a_friendly_error_not_a_raw_traceback(m
         packing_list_module, "parse_packing_list",
         lambda b: (_ for _ in ()).throw(packing_list_module.PackingListParseError("bad file")),
     )
-    monkeypatch.setattr(jobsheet_module, "parse_jobsheet", lambda b: {})
+    monkeypatch.setattr(jobsheet_module, "parse_jobsheet", lambda b: ({}, []))
 
     at = AppTest.from_file("tests/harness_export_tool.py", default_timeout=120)
     at.run()
