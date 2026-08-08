@@ -39,4 +39,4 @@ def test_pack_column_headers_has_the_fields_the_fantasy_file_needs():
 
 
 def test_jobsheet_columns_has_the_fields_the_fantasy_file_needs():
-    assert set(config.JOBSHEET_COLUMNS.keys()) == {"design_no", "parent_style", "setting_cert"}
+    assert set(config.JOBSHEET_COLUMNS.keys()) == {"design_no", "parent_style"}

@@ -7,7 +7,21 @@ a project dependency).
 
 Returns (index, warnings) -- matching packing_list.parse_packing_list's
 convention -- so a garbage/wrong-file-type upload doesn't silently produce
-an empty index with no signal to the user."""
+an empty index with no signal to the user.
+
+index_col=False is required: a real jobsheet export from this OMS carries
+one unnamed trailing field on every data row beyond what the header row
+declares (confirmed against a real "jobsheet (53).csv" sample -- 76 fields
+per data row vs. 75 header names). pandas' default read_csv, when a row has
+more fields than the header, silently assumes the *first* column is an
+unlabeled index and shifts every other column's data left by one position
+to compensate -- with no error or warning. That shift is backwards here
+(the extra field is trailing, not leading), so every single named column
+came out reading the next column's data: "Order Id" held what belonged to
+"Channel Ref", etc. This was caught by running the real file through this
+parser, not by any synthetic test. index_col=False disables that guess,
+correctly aligning every named column and only discarding the one unnamed
+trailing field this OMS export doesn't label."""
 from io import BytesIO
 
 import pandas as pd
@@ -16,7 +30,7 @@ from export_tool import config
 
 
 def parse_jobsheet(file_bytes: bytes) -> tuple:
-    frame = pd.read_csv(BytesIO(file_bytes), dtype=str, keep_default_na=False)
+    frame = pd.read_csv(BytesIO(file_bytes), dtype=str, keep_default_na=False, index_col=False)
     warnings = []
 
     if not any(key_column in frame.columns for key_column in config.JOBSHEET_KEY_COLUMNS):

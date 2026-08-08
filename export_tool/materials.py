@@ -2,36 +2,42 @@
 File color normalization -- ported from the source HTML tool's
 getFantasyMat/buildItemName/normColorOS.
 
-resolve_fantasy_material is a deliberate, verified reproduction of the
-source tool's exact matching behavior, not a looser approximation. An
-earlier attempt at this port generalized getFantasyMat's two hardcoded
-shortcuts (18KT-white, 14KT-rose) into pure table-driven matching by
-compacting whitespace on BOTH sides of the comparison (input and table
-`code`). That looked cleaner but silently changed real shipment data: on
-the real Data/JNE016 sample, it mapped "14KTY" (9 items, ~20% of the file)
-to "14KT" because the table's "14KT Y" entry (WITH a space) matched once
-spaces were stripped from both sides -- something the source tool's own
-raw (non-compacted) table comparison never does, so "14KTY" ships unmapped
-in production today. A human reviewed this discrepancy against the source
-tool and decided: reproduce production exactly, table-completeness gaps
-and all. So:
+resolve_fantasy_material's matching logic went through two corrections
+after being checked against real data, in order:
 
-- The source tool's two hardcoded shortcut *trigger conditions* (a
-  whitespace-compacted substring check for "18KTW" / "14KTR") are kept
-  as literal special cases -- there's no way to express them as pure
-  table lookups without inventing table rows that don't exist in the
-  source ("14KTR" alone, without a trailing "G", must still trigger the
-  rose-gold shortcut, matching production).
-- Their *output values* are no longer separate hardcoded literals (which
-  had a spacing typo on the rose-gold branch -- source-tool problem 4).
-  Instead they're looked up from FANTASY_MATERIAL_MAP by exact code match,
-  so the table's own correctly-spaced text is what comes back, and editing
-  the table would (in principle) also update these two cases.
-- The table-lookup loop itself compares the raw (trim+uppercase only,
-  spaces intact) input against each table code's raw (trim+uppercase only)
-  text -- no whitespace compaction on either side. This is why "14KTY"
-  correctly stays unmapped: it has no exact match to the spaced "14KT Y"
-  table entry.
+1. An early version generalized getFantasyMat's hardcoded shortcuts into
+   pure table-driven matching by compacting whitespace on BOTH sides of
+   the comparison (input and table `code`). That silently changed real
+   shipment data (mapped "14KTY" to "14KT" because the table's "14KT Y"
+   entry matched once spaces were stripped from both sides, something the
+   source tool's raw table comparison never does) -- reverted to reproduce
+   the source HTML file's exact default behavior instead.
+2. That "exact default behavior" was then checked against a real reference
+   "Open Stock" file (Data/JNE016 Open Stock.xls, local-only, real business
+   data) and found to disagree with what this business's actual live tool
+   produces on most of a real shipment's KT codes -- e.g. the source file's
+   hardcoded "14KTR" -> "14KT RG" shortcut doesn't match a single real
+   "14KTR" row (real output: "14KR"). The likely explanation: the source
+   tool's material tables live in browser localStorage, editable via a
+   Settings UI this port doesn't have (decision 1) -- the HTML file's
+   *defaults* aren't necessarily what this business's *live, presumably
+   customized* config actually contains. FANTASY_MATERIAL_MAP now reflects
+   the real reference file's output (see its comment for exactly which
+   rows), and the "14KTR" hardcoded trigger was removed since "14KTR" is
+   now a plain table row.
+
+What's left:
+- One hardcoded shortcut *trigger condition* remains ("18KTW", a
+  whitespace-compacted substring check) -- there's no real-shipment
+  evidence either confirming or contradicting it (no "18KTW"-shaped code
+  appeared in the one real file checked), so it's kept as the source
+  file's default, unverified against production.
+- The "PT" trigger's *output values* are looked up from
+  FANTASY_MATERIAL_MAP by exact code match rather than hardcoded, so
+  editing the table also updates it.
+- The table-lookup loop compares the raw (trim+uppercase only, spaces
+  intact) input against each table code's raw (trim+uppercase only) text
+  -- no whitespace compaction on either side, matching the source tool.
 - The final fallback returns the raw (trim+uppercase only) input, not a
   compacted form -- matching the source tool's own fallback, which never
   strips internal spaces from the code it echoes back."""
@@ -44,11 +50,11 @@ from export_tool._util import is_blank
 _GRADE_ABBREVIATIONS = {"VS", "SI", "VV", "WS"}
 
 # (compacted substring trigger, table code to look up) -- reproduces the
-# source tool's two hardcoded shortcuts. Order matters only in that both
-# are checked before the general table lookup.
+# source tool's remaining hardcoded shortcuts (see module docstring for why
+# "14KTR" isn't one of these anymore). Order matters only in that both are
+# checked before the general table lookup.
 _SPECIAL_CASE_TRIGGERS = [
     ("18KTW", "18KT WG"),
-    ("14KTR", "14KT RG"),
     ("PT", "PT"),
 ]
 
@@ -58,6 +64,10 @@ class FantasyMaterial:
     c1: str
     suffix: str
     metal: str
+    # False only for the final raw-passthrough fallback -- lets callers warn
+    # when a KT code isn't recognized by any table row or special case,
+    # instead of silently shipping the raw code through unmapped.
+    matched: bool = True
 
 
 def _compact(value) -> str:
@@ -82,7 +92,7 @@ def resolve_fantasy_material(kt_raw) -> FantasyMaterial:
     match = _lookup_by_exact_code(raw)
     if match is not None:
         return match
-    return FantasyMaterial(c1=raw, suffix=raw, metal=raw)
+    return FantasyMaterial(c1=raw, suffix=raw, metal=raw, matched=False)
 
 
 def _alpha_prefix(text: str) -> str:

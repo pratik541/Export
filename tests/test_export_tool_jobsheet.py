@@ -30,14 +30,18 @@ def test_first_row_wins_when_two_rows_share_a_key():
 
 
 def test_missing_key_column_in_csv_is_ignored_not_an_error():
+    # "Setting SKU" (a JOBSHEET_KEY_COLUMNS entry, but not a configured
+    # JOBSHEET_COLUMNS value) is absent -- indexing still works via "Order
+    # Id" alone, no warning (Order Id doubles as the configured design_no
+    # column, so it must stay present here).
     csv_text = (
-        "Setting SKU,Original Payment Method,Product Status,Setting Certificate No\n"
-        "SKU9,PAY-9,PARENT,SETCERT\n"
+        "Order Id,Original Payment Method,Product Status,Setting Certificate No\n"
+        "ORD9,PAY-9,PARENT,SETCERT\n"
     )
 
     index, warnings = jobsheet.parse_jobsheet(csv_text.encode())
 
-    assert index["SKU9"]["Original Payment Method"] == "PAY-9"
+    assert index["ORD9"]["Original Payment Method"] == "PAY-9"
     assert warnings == []
 
 

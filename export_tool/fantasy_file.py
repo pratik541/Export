@@ -3,13 +3,34 @@ export, renamed per user decision) -- a wide layout with fixed C1/C2 metal+
 labor slots and 20 further stone slots (C3-C22). Column layout and header
 text are dictated by the receiving system and are NOT configurable.
 
-Cell coloring uses the source tool's clearly-documented highlight intent
-(light-yellow C1, blue C2, bright-yellow C4/C9/C22, blue C10) -- not the
-source tool's actual, more complex output, which was driven by a separate
-238-entry hardcoded style-index array referencing theme-tinted colors
-copied wholesale from a reference workbook. Reproducing that exactly was
-judged not worth the effort for a cosmetic detail (user decision during
-planning); this highlight scheme is what's actually applied here."""
+Cell coloring matches a real reference "Open Stock" file's actual cell
+formatting exactly for the header row's core/C1/C2/C3-C7 columns (see
+_STONE_SLOT_COLORS) -- not the source HTML tool's dead OS_COLORS map (never
+applied anywhere in that tool's own code) or this port's earlier
+placeholder highlight scheme (chosen before any real file had been
+inspected, since reproducing the source tool's actual 238-entry hardcoded
+style-index output was judged not worth the effort). Once real reference
+files were available, both turned out not to match production at all, so
+the colors here were replaced with the real, verified values instead.
+
+Three more deliberate departures from the source tool's literal code, all
+made after comparing this port's output against real reference "Open
+Stock" files (Data/JNE016, JNE008, JNE009, JNE017 Open Stock.xls,
+local-only, real business data), which the source tool's code did not
+reproduce:
+- LotName: the source tool computes settingCert || igiCert || sn (a
+  certificate-number fallback chain). The real reference file shows the
+  style number (sn) on every row checked, even when a certificate was
+  available -- so LotName here is always sn (user decision).
+- C1:Weight: the source tool rounds to 2 decimal places
+  (Math.round(w*100)/100). The real reference file shows the raw,
+  unrounded packing-list value -- so no rounding is applied here (user
+  decision).
+- Material/Metal codes: see export_tool/materials.py and config.py's
+  FANTASY_MATERIAL_MAP -- the source file's default material table
+  disagreed with real production output on most KT codes across 4 real
+  shipments (e.g. "14KTR" -> "14KT RG" per the source file's hardcoded
+  default vs. "14KR" in every real reference checked)."""
 from io import BytesIO
 
 import openpyxl
@@ -54,6 +75,8 @@ _AVAILABLE_SLOTS = MAX_SLOTS - 3 + 1
 def build_rows(items: list, jobsheet_index: dict) -> tuple:
     rows = []
     warnings = []
+    unmatched_jobsheet_items = []
+    unmapped_kt_codes = {}  # kt code -> list of style numbers that used it
     no_side_categories = {c.strip().upper() for c in config.NO_SIDE_DIAMOND_CATEGORIES}
 
     for item in items:
@@ -63,7 +86,11 @@ def build_rows(items: list, jobsheet_index: dict) -> tuple:
             or jobsheet_index.get(master_style(style_no))
             or {}
         )
+        if not jobsheet_row:
+            unmatched_jobsheet_items.append(style_no)
         fantasy = materials.resolve_fantasy_material(item["kt"])
+        if not fantasy.matched:
+            unmapped_kt_codes.setdefault(item["kt"], []).append(style_no)
         design_no = _jobsheet_value(jobsheet_row, config.JOBSHEET_COLUMNS["design_no"])
         parent_style = _jobsheet_value(jobsheet_row, config.JOBSHEET_COLUMNS["parent_style"])
 
@@ -73,12 +100,7 @@ def build_rows(items: list, jobsheet_index: dict) -> tuple:
 
         row = {column: None for column in FANTASY_COLUMNS}
         row["Item Name"] = materials.build_item_name(parent_style, master_style(style_no), fantasy.suffix)
-        row["LotName"] = (
-            _jobsheet_value(jobsheet_row, config.JOBSHEET_COLUMNS["setting_cert"])
-            or item["cert"]
-            or _first_stone_cert(item["stones"])
-            or style_no
-        )
+        row["LotName"] = style_no
         row["Metal"] = fantasy.metal
         row["Order #"] = design_no
         row["Qty"] = safe_num(item["qty"])
@@ -87,8 +109,7 @@ def build_rows(items: list, jobsheet_index: dict) -> tuple:
         row["ItemTypeID"] = config.ITEM_TYPE_ID
         row["C1:Item Name"] = fantasy.c1
         row["C1:LotName"] = fantasy.c1
-        metal_weight = safe_num(item["tmw"])
-        row["C1:Weight"] = None if metal_weight is None else round(metal_weight, 2)
+        row["C1:Weight"] = safe_num(item["tmw"])
         row["C1: Total H.Cost"] = safe_num(item["mv"])
         row["C2:Item Name"] = "Labor"
         row["C2:LotName"] = "Labor"
@@ -120,6 +141,21 @@ def build_rows(items: list, jobsheet_index: dict) -> tuple:
 
         rows.append(row)
 
+    if unmatched_jobsheet_items:
+        warnings.append(
+            f"{len(unmatched_jobsheet_items)} item(s) had no matching jobsheet row "
+            f"(Order #/parent style left blank): {', '.join(unmatched_jobsheet_items)}"
+        )
+    if unmapped_kt_codes:
+        total = sum(len(styles) for styles in unmapped_kt_codes.values())
+        codes = ", ".join(
+            f'"{kt}" ({len(styles)}x, e.g. {styles[0]})' for kt, styles in sorted(unmapped_kt_codes.items())
+        )
+        warnings.append(
+            f"{total} item(s) used a KT code not in FANTASY_MATERIAL_MAP (raw code used "
+            f"as-is for Metal/C1): {codes} -- add to export_tool/config.py if these should map to something else."
+        )
+
     return rows, warnings
 
 
@@ -131,33 +167,37 @@ def _jobsheet_value(jobsheet_row: dict, column_name: str):
     return text or None
 
 
-def _first_stone_cert(stones_list):
-    for stone in stones_list:
-        if not is_blank(stone.get("cert")):
-            return str(stone["cert"]).strip()
-    return None
-
-
-_LIGHT_YELLOW = "FFEB9C"
-_BLUE = "00B0F0"
+_GRAY = "C0C0C0"
+_LIGHT_YELLOW = "FFFF99"
+_BLUE = "00CCFF"
+_PEACH = "FFCC99"
 _BRIGHT_YELLOW = "FFFF00"
-_BLUE_SLOTS = {10}
-_BRIGHT_YELLOW_SLOTS = {4, 9, 22}
+_OLIVE = "99CC00"
+
+# Stone-slot fill colors, extracted directly from real reference "Open
+# Stock" files' actual cell formatting (Data/JNE016, JNE008, JNE009, JNE017
+# Open Stock.xls, local-only, real business data -- all 4 agree exactly on
+# slots C1-C7). Slots C8-C22 have no verified color: no real shipment
+# checked used more than 5 distinct stone groups (slot C7), so they're left
+# unfilled rather than guessed.
+_STONE_SLOT_COLORS = {3: _PEACH, 4: _LIGHT_YELLOW, 5: _BRIGHT_YELLOW, 6: _OLIVE, 7: _OLIVE}
 
 
 def _column_fills() -> dict:
-    """1-indexed column -> fill hex color: fixed for the C1 (cols 11-14) and
-    C2 (cols 15-18) core slots, then the highlighted stone slots (4, 9, 10,
-    22) among C3-C22, each occupying an 11-column block starting at
-    19 + 11*(slot-3)."""
+    """1-indexed column -> fill hex color, matching a real reference file's
+    actual formatting exactly (see _STONE_SLOT_COLORS) -- not the source
+    HTML tool's dead, never-applied OS_COLORS map, which was checked against
+    real files and does not match production output at all (e.g. its C4 is
+    bright yellow FFFF00; real C4 is light yellow FFFF99, the same as C1)."""
     fills = {}
+    for col in range(3, 11):
+        fills[col] = _GRAY
     for col in range(11, 15):
         fills[col] = _LIGHT_YELLOW
     for col in range(15, 19):
         fills[col] = _BLUE
-    for slot in _BLUE_SLOTS | _BRIGHT_YELLOW_SLOTS:
+    for slot, color in _STONE_SLOT_COLORS.items():
         start = 19 + 11 * (slot - 3)
-        color = _BLUE if slot in _BLUE_SLOTS else _BRIGHT_YELLOW
         for col in range(start, start + 11):
             fills[col] = color
     return fills

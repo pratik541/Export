@@ -10,10 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from export_tool import fantasy_file, packing_list
+from export_tool import fantasy_file, jobsheet, packing_list
 
 DATA_DIR = Path(__file__).parent.parent / "Data"
 PACKING_LIST_PATH = DATA_DIR / "JNE016 CR Packing List Export Report new.xlsx"
+JOBSHEET_PATH = DATA_DIR / "JNE016 jobsheet.csv"
 
 pytestmark = pytest.mark.skipif(
     not PACKING_LIST_PATH.exists(),
@@ -37,6 +38,10 @@ def test_real_packing_list_has_a_bracelet_item():
     assert any((item["cat"] or "").upper() == "BRACELET" for item in items)
 
 
+@pytest.mark.skipif(
+    not JOBSHEET_PATH.exists(),
+    reason="Real sample jobsheet file is local-only (not committed) -- skipped when absent.",
+)
 def test_real_packing_list_flows_through_the_full_pipeline_to_a_valid_workbook():
     from io import BytesIO
     import openpyxl
@@ -44,7 +49,14 @@ def test_real_packing_list_flows_through_the_full_pipeline_to_a_valid_workbook()
     items, warnings = packing_list.parse_packing_list(PACKING_LIST_PATH.read_bytes())
     assert warnings == []
 
-    rows, build_warnings = fantasy_file.build_rows(items, {})
+    js_index, js_warnings = jobsheet.parse_jobsheet(JOBSHEET_PATH.read_bytes())
+    assert js_warnings == []
+
+    rows, build_warnings = fantasy_file.build_rows(items, js_index)
+    # Every real item in this shipment matches a jobsheet row and every real
+    # KT code resolves via FANTASY_MATERIAL_MAP (see export_tool/config.py) --
+    # a non-empty build_warnings here means one of those two real-world
+    # guarantees broke.
     assert build_warnings == []
     assert len(rows) == len(items)
 
@@ -54,14 +66,16 @@ def test_real_packing_list_flows_through_the_full_pipeline_to_a_valid_workbook()
     assert sheet.max_column == len(fantasy_file.FANTASY_COLUMNS) == 238
     assert sheet.max_row == len(rows) + 1  # +1 for the header row
 
-    # Regression pin for the exact production-parity fix: these two KT codes
-    # are both present in this real file and must resolve exactly as today's
-    # live tool does (see export_tool/materials.py's _SPECIAL_CASE_TRIGGERS).
+    # Regression pin, verified against the real "Open Stock" reference file
+    # (Data/JNE016 Open Stock.xls, local-only): these KT codes are both
+    # present in this real file and must resolve via FANTASY_MATERIAL_MAP's
+    # real-evidenced rows, not the source HTML file's stale defaults.
     kt_codes = {item["kt"] for item in items}
     assert "14KTR" in kt_codes
     assert "14KTY" in kt_codes
 
     metal_col = fantasy_file.FANTASY_COLUMNS.index("Metal") + 1
     metals_seen = {sheet.cell(row=r, column=metal_col).value for r in range(2, sheet.max_row + 1)}
-    assert "14KT RG" in metals_seen   # from the 14KTR item -- must be mapped
-    assert "14KTY" in metals_seen     # from the 14KTY items -- must stay unmapped
+    assert "14KR" in metals_seen    # from the 14KTR item
+    assert "14KY" in metals_seen    # from the 14KTY items
+    assert "14KT RG" not in metals_seen  # the source HTML file's stale default, must not appear
