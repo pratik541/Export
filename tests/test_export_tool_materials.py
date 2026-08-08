@@ -24,6 +24,24 @@ def test_unrecognized_code_falls_back_to_the_compacted_input():
     assert result == materials.FantasyMaterial(c1="18KTY", suffix="18KTY", metal="18KTY")
 
 
+def test_bare_rose_gold_abbreviation_without_full_word_still_resolves():
+    # Real-world case (Data/JNE016 sample, 1 item): "14KTR" (no trailing G) must
+    # still trigger the rose-gold special case, matching today's live tool.
+    result = materials.resolve_fantasy_material("14KTR")
+    assert result == materials.FantasyMaterial(c1="14KT RG", suffix="14KT RG", metal="14KT RG")
+
+
+def test_spaceless_yellow_gold_abbreviation_stays_unmapped_matching_production():
+    # Real-world case (Data/JNE016 sample, 9 items, ~20% of the file): "14KTY" is
+    # NOT one of the two hardcoded special cases and does not exactly match any
+    # table code (the table has "14KT Y" WITH a space) -- today's live tool ships
+    # this unmapped, verbatim. A blanket both-sides-compacted match would
+    # incorrectly map it to "14KT" and silently change real shipment output --
+    # regression test for that exact bug.
+    result = materials.resolve_fantasy_material("14KTY")
+    assert result == materials.FantasyMaterial(c1="14KTY", suffix="14KTY", metal="14KTY")
+
+
 def test_blank_kt_falls_back_to_empty_string():
     result = materials.resolve_fantasy_material(None)
     assert result == materials.FantasyMaterial(c1="", suffix="", metal="")
