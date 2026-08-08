@@ -116,7 +116,8 @@ def test_category_header_and_total_rows_do_not_produce_spurious_items():
 
 def test_missing_style_no_column_raises_parse_error():
     cells = dict(_TWO_ITEM_CELLS)
-    del cells[(1, "B")]
+    cells[(1, "B")] = "Style Number"  # contains "style" (header row still found), but doesn't
+                                       # match the exact configured "Style No." header text
 
     with pytest.raises(packing_list.PackingListParseError, match="Sr No / Style No"):
         packing_list.parse_packing_list(_write(cells))

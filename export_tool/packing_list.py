@@ -91,7 +91,7 @@ def _normalize_header(value) -> str:
 def _find_header_row(rows):
     for row in rows:
         labels = [_normalize_header(v) for v in row if v is not None]
-        if any("sr no" in label for label in labels):
+        if any("sr no" in label for label in labels) and any("style" in label for label in labels):
             return row
     raise PackingListParseError(
         'Could not find the header row (expecting columns like "Sr No" and '
