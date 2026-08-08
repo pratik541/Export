@@ -165,10 +165,8 @@ def _make_stone(row, columns):
     pcs = safe_num(_cell(row, columns, "stnpcs"))
     position = stones.classify_position(cert, pcs)
     shape, color, clarity = _split_scc(scc)
-    stud = _clean_str(_cell(row, columns, "stud"))
-    label = re.sub(r"\s*\(.*?\)", "", stud).strip() if stud else ""
     return {
-        "position": position, "label": label or config.STONE_FALLBACK_LABEL,
+        "position": position,
         "shape": shape, "color": color, "clarity": clarity,
         "lab": _clean_str(_cell(row, columns, "lab")),
         "cert": cert,
