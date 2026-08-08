@@ -1,4 +1,4 @@
-"""Export Tool page: upload a Packing List (.xls/.xlsx) + Jobsheet (.csv)
+"""Export Tool page: upload a Packing List (.xlsx) + Jobsheet (.csv)
 for one shipment, generate and download the Fantasy File. All parsing/
 building logic lives in export_tool/; this module is presentation only,
 following the pattern of page_working_sheet.py."""
@@ -20,7 +20,7 @@ def render():
 
     pl_col, js_col = st.columns(2)
     packing_list_file = pl_col.file_uploader(
-        "Packing List (.xls/.xlsx)", type=["xls", "xlsx"], key="export_tool_pl_upload",
+        "Packing List (.xlsx)", type=["xlsx"], key="export_tool_pl_upload",
     )
     jobsheet_file = js_col.file_uploader(
         "Jobsheet (.csv)", type=["csv"], key="export_tool_js_upload",
