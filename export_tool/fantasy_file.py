@@ -1,7 +1,20 @@
 """Builds and writes the Fantasy File (the source HTML tool's "Open Stock"
 export, renamed per user decision) -- a wide layout with fixed C1/C2 metal+
 labor slots and 20 further stone slots (C3-C22). Column layout and header
-text are dictated by the receiving system and are NOT configurable."""
+text are dictated by the receiving system and are NOT configurable.
+
+Cell coloring uses the source tool's clearly-documented highlight intent
+(light-yellow C1, blue C2, bright-yellow C4/C9/C22, blue C10) -- not the
+source tool's actual, more complex output, which was driven by a separate
+238-entry hardcoded style-index array referencing theme-tinted colors
+copied wholesale from a reference workbook. Reproducing that exactly was
+judged not worth the effort for a cosmetic detail (user decision during
+planning); this highlight scheme is what's actually applied here."""
+from io import BytesIO
+
+import openpyxl
+from openpyxl.styles import PatternFill
+
 from export_tool import config, materials, stones
 from export_tool._util import is_blank, master_style, safe_num
 
@@ -123,3 +136,56 @@ def _first_stone_cert(stones_list):
         if not is_blank(stone.get("cert")):
             return str(stone["cert"]).strip()
     return None
+
+
+_LIGHT_YELLOW = "FFEB9C"
+_BLUE = "00B0F0"
+_BRIGHT_YELLOW = "FFFF00"
+_BLUE_SLOTS = {10}
+_BRIGHT_YELLOW_SLOTS = {4, 9, 22}
+
+
+def _column_fills() -> dict:
+    """1-indexed column -> fill hex color: fixed for the C1 (cols 11-14) and
+    C2 (cols 15-18) core slots, then the highlighted stone slots (4, 9, 10,
+    22) among C3-C22, each occupying an 11-column block starting at
+    19 + 11*(slot-3)."""
+    fills = {}
+    for col in range(11, 15):
+        fills[col] = _LIGHT_YELLOW
+    for col in range(15, 19):
+        fills[col] = _BLUE
+    for slot in _BLUE_SLOTS | _BRIGHT_YELLOW_SLOTS:
+        start = 19 + 11 * (slot - 3)
+        color = _BLUE if slot in _BLUE_SLOTS else _BRIGHT_YELLOW
+        for col in range(start, start + 11):
+            fills[col] = color
+    return fills
+
+
+def write_xlsx(rows: list) -> bytes:
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Sheet1"
+    fills = _column_fills()
+
+    for col_index, column in enumerate(FANTASY_COLUMNS, start=1):
+        cell = sheet.cell(row=1, column=col_index, value=column)
+        if col_index in fills:
+            color = fills[col_index]
+            cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+
+    for row_index, row in enumerate(rows, start=2):
+        for col_index, column in enumerate(FANTASY_COLUMNS, start=1):
+            value = row.get(column)
+            if value is None:
+                continue
+            if column in _NUMERIC_COLUMNS:
+                value = safe_num(value)
+                if value is None:
+                    continue
+            sheet.cell(row=row_index, column=col_index, value=value)
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()

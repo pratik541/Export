@@ -89,3 +89,52 @@ def test_build_rows_warns_and_truncates_when_more_than_twenty_stone_groups():
 
     assert any("truncated" in w for w in warnings)
     assert rows[0]["C22:Item Name"] is not None
+
+
+from io import BytesIO
+
+import openpyxl
+from openpyxl.styles import PatternFill
+
+
+def _rgb_of(hex_color):
+    return PatternFill(start_color=hex_color, end_color=hex_color, fill_type="solid").start_color.rgb
+
+
+def test_write_xlsx_includes_the_header_row_and_row_values():
+    rows = [{column: None for column in fantasy_file.FANTASY_COLUMNS}]
+    rows[0]["Metal"] = "18KT WG"
+    rows[0]["Qty"] = 2
+    rows[0]["C3:Item Name"] = "Diamonds"
+
+    workbook = openpyxl.load_workbook(BytesIO(fantasy_file.write_xlsx(rows)))
+    sheet = workbook.active
+
+    header = [cell.value for cell in next(sheet.iter_rows(min_row=1, max_row=1))]
+    assert header == fantasy_file.FANTASY_COLUMNS
+
+    metal_col = fantasy_file.FANTASY_COLUMNS.index("Metal") + 1
+    qty_col = fantasy_file.FANTASY_COLUMNS.index("Qty") + 1
+    assert sheet.cell(row=2, column=metal_col).value == "18KT WG"
+    assert sheet.cell(row=2, column=qty_col).value == 2
+
+
+def test_write_xlsx_colors_the_c1_c2_and_highlighted_stone_slot_columns():
+    rows = [{column: None for column in fantasy_file.FANTASY_COLUMNS}]
+
+    workbook = openpyxl.load_workbook(BytesIO(fantasy_file.write_xlsx(rows)))
+    sheet = workbook.active
+
+    def fill_of(column_name):
+        col_index = fantasy_file.FANTASY_COLUMNS.index(column_name) + 1
+        return sheet.cell(row=1, column=col_index).fill.start_color.rgb
+
+    assert fill_of("C1:Item Name") == _rgb_of("FFEB9C")
+    assert fill_of("C2:Item Name") == _rgb_of("00B0F0")
+    assert fill_of("C4:Item Name") == _rgb_of("FFFF00")
+    assert fill_of("C9:Item Name") == _rgb_of("FFFF00")
+    assert fill_of("C10:Item Name") == _rgb_of("00B0F0")
+    assert fill_of("C22:Item Name") == _rgb_of("FFFF00")
+
+    col_index = fantasy_file.FANTASY_COLUMNS.index("C3:Item Name") + 1
+    assert sheet.cell(row=1, column=col_index).fill.fill_type is None
